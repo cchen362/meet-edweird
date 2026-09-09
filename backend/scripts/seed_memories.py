@@ -140,13 +140,10 @@ async def main():
 
 
 if __name__ == "__main__":
-    if sys.platform == "win32":
-        # Same SelectorEventLoop fix as run.py -- psycopg crashes on ProactorEventLoop
-        loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(main())
-        finally:
-            loop.close()
-    else:
-        asyncio.run(main())
+    # Same SelectorEventLoop fix as run.py -- psycopg crashes on ProactorEventLoop
+    loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()

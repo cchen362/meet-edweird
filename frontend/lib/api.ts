@@ -381,7 +381,6 @@ export interface Conversation {
 }
 
 export interface ConversationMessageAttachment {
-  file_id?: string;
   filename: string;
   mime_type: string;
   size?: number;
@@ -504,122 +503,6 @@ export async function deleteEvent(id: string): Promise<{ status: string }> {
   });
   if (!response.ok) {
     throw new Error("Failed to delete event");
-  }
-  return response.json();
-}
-
-// Persistent Databases API types
-export interface PersistentDatabase {
-  id: string;
-  name: string;
-  schema_name: string;
-  description: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  last_accessed: string | null;
-}
-
-export interface DatabaseTable {
-  name: string;
-  column_count: number;
-}
-
-export interface DatabaseColumn {
-  name: string;
-  data_type: string;
-  is_nullable: string;
-  column_default: string | null;
-  ordinal_position: number;
-}
-
-// Persistent Databases API functions
-export async function listDatabases(): Promise<PersistentDatabase[]> {
-  const response = await authFetch(`${API_URL}/api/databases`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch databases");
-  }
-  return response.json();
-}
-
-export async function getDatabaseTables(name: string): Promise<DatabaseTable[]> {
-  const response = await authFetch(`${API_URL}/api/databases/${encodeURIComponent(name)}/tables`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch database tables");
-  }
-  return response.json();
-}
-
-export async function getDatabaseColumns(dbName: string, tableName: string): Promise<DatabaseColumn[]> {
-  const response = await authFetch(`${API_URL}/api/databases/${encodeURIComponent(dbName)}/tables/${encodeURIComponent(tableName)}/columns`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch table columns");
-  }
-  return response.json();
-}
-
-export async function deleteDatabase(name: string): Promise<{ status: string; name: string }> {
-  const response = await authFetch(`${API_URL}/api/databases/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to delete database");
-  }
-  return response.json();
-}
-
-// File Storage API types
-export interface StoredFileItem {
-  id: string;
-  filename: string;
-  mime_type: string;
-  size_bytes: number;
-  category: string;
-  description: string | null;
-  tags: string | null;
-  source: string;
-  source_conversation_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  last_accessed: string | null;
-  access_count: number;
-  download_url: string;
-}
-
-export interface FilesResponse {
-  files: StoredFileItem[];
-  pagination: {
-    limit: number;
-    offset: number;
-    total: number;
-  };
-}
-
-// File Storage API functions
-export async function listFiles(
-  category?: string,
-  source?: string,
-  limit = 10,
-  offset = 0
-): Promise<FilesResponse> {
-  const params = new URLSearchParams();
-  if (category) params.set("category", category);
-  if (source) params.set("source", source);
-  params.set("limit", limit.toString());
-  params.set("offset", offset.toString());
-
-  const response = await authFetch(`${API_URL}/api/files?${params}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch files");
-  }
-  return response.json();
-}
-
-export async function deleteFile(id: string): Promise<{ status: string; id: string }> {
-  const response = await authFetch(`${API_URL}/api/files/${id}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to delete file");
   }
   return response.json();
 }
@@ -1017,13 +900,6 @@ export interface HeartbeatStatus {
   listener_status: string;
   allowed_senders: AllowedSender[];
   tracks: Record<string, TrackStatus>;
-  imessage_enabled: boolean;
-  imessage_poll_seconds: number;
-  calendar_enabled: boolean;
-  calendar_poll_seconds: number;
-  calendar_lookahead_minutes: number;
-  email_enabled: boolean;
-  email_poll_seconds: number;
   whatsapp_enabled: boolean;
   whatsapp_poll_seconds: number;
 }
@@ -1033,13 +909,6 @@ export interface HeartbeatConfig {
   triage_interval_seconds: number;
   digest_token_cap: number;
   allowed_senders: AllowedSender[];
-  imessage_enabled: boolean;
-  imessage_poll_seconds: number;
-  calendar_enabled: boolean;
-  calendar_poll_seconds: number;
-  calendar_lookahead_minutes: number;
-  email_enabled: boolean;
-  email_poll_seconds: number;
   whatsapp_enabled: boolean;
   whatsapp_poll_seconds: number;
 }

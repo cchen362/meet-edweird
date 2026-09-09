@@ -175,9 +175,6 @@ async def update_config(body: HeartbeatConfigUpdate):
             session.add(config)
 
         # Snapshot previous enabled states for hot-start/stop
-        prev_imessage = config.imessage_enabled
-        prev_calendar = config.calendar_enabled
-        prev_email = config.email_enabled
         prev_whatsapp = config.whatsapp_enabled
 
         if body.enabled is not None:
@@ -195,20 +192,6 @@ async def update_config(body: HeartbeatConfigUpdate):
             config.allowed_senders = json.dumps(
                 [s.model_dump() for s in body.allowed_senders]
             )
-        if body.imessage_enabled is not None:
-            config.imessage_enabled = body.imessage_enabled
-        if body.imessage_poll_seconds is not None:
-            config.imessage_poll_seconds = body.imessage_poll_seconds
-        if body.calendar_enabled is not None:
-            config.calendar_enabled = body.calendar_enabled
-        if body.calendar_poll_seconds is not None:
-            config.calendar_poll_seconds = body.calendar_poll_seconds
-        if body.calendar_lookahead_minutes is not None:
-            config.calendar_lookahead_minutes = body.calendar_lookahead_minutes
-        if body.email_enabled is not None:
-            config.email_enabled = body.email_enabled
-        if body.email_poll_seconds is not None:
-            config.email_poll_seconds = body.email_poll_seconds
         if body.whatsapp_enabled is not None:
             config.whatsapp_enabled = body.whatsapp_enabled
         if body.whatsapp_poll_seconds is not None:
@@ -218,7 +201,7 @@ async def update_config(body: HeartbeatConfigUpdate):
         await session.refresh(config)
 
         # Hot-start/stop listeners when enabled state changes
-        await _sync_listeners(config, prev_imessage, prev_calendar, prev_email, prev_whatsapp)
+        await _sync_listeners(config, prev_whatsapp)
 
         # Parse allowed_senders back for response
         allowed_senders = []
@@ -233,42 +216,14 @@ async def update_config(body: HeartbeatConfigUpdate):
             triage_interval_seconds=config.triage_interval_seconds,
             digest_token_cap=config.digest_token_cap,
             allowed_senders=allowed_senders,
-            imessage_enabled=config.imessage_enabled,
-            imessage_poll_seconds=config.imessage_poll_seconds,
-            calendar_enabled=config.calendar_enabled,
-            calendar_poll_seconds=config.calendar_poll_seconds,
-            calendar_lookahead_minutes=config.calendar_lookahead_minutes,
-            email_enabled=config.email_enabled,
-            email_poll_seconds=config.email_poll_seconds,
             whatsapp_enabled=config.whatsapp_enabled,
             whatsapp_poll_seconds=config.whatsapp_poll_seconds,
         )
 
 
-async def _sync_listeners(config, prev_imessage: bool, prev_calendar: bool, prev_email: bool, prev_whatsapp: bool) -> None:
+async def _sync_listeners(config, prev_whatsapp: bool) -> None:
     """Start or stop listeners when their enabled state changes."""
-    from services.heartbeat.listener_imessage import start_imessage_listener, stop_imessage_listener
-    from services.heartbeat.listener_calendar import start_calendar_listener, stop_calendar_listener
-    from services.heartbeat.listener_email import start_email_listener, stop_email_listener
     from services.heartbeat.listener_whatsapp import start_whatsapp_listener, stop_whatsapp_listener
-
-    # iMessage
-    if config.imessage_enabled and not prev_imessage:
-        await start_imessage_listener()
-    elif not config.imessage_enabled and prev_imessage:
-        await stop_imessage_listener()
-
-    # Calendar
-    if config.calendar_enabled and not prev_calendar:
-        await start_calendar_listener(config)
-    elif not config.calendar_enabled and prev_calendar:
-        await stop_calendar_listener()
-
-    # Email
-    if config.email_enabled and not prev_email:
-        await start_email_listener(config)
-    elif not config.email_enabled and prev_email:
-        await stop_email_listener()
 
     # WhatsApp
     if config.whatsapp_enabled and not prev_whatsapp:

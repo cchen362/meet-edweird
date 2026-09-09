@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/public/favicon.svg" width="100" height="100" alt="Edward" />
+  <img src="frontend/public/favicon.svg" width="100" height="100" alt="Edward" />
 </p>
 
 <h1 align="center">Edward</h1>
@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 License" /></a>
-  <img src="https://img.shields.io/badge/platform-macOS%20·%20Linux%20·%20WSL-blue.svg" alt="macOS · Linux · WSL" />
+  <img src="https://img.shields.io/badge/platform-Windows%2011-blue.svg" alt="Windows 11" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+" />
   <img src="https://img.shields.io/badge/Next.js-15-black.svg" alt="Next.js" />
 </p>
@@ -59,7 +59,7 @@
 
 ## What is Edward?
 
-Edward is a full-stack AI assistant built on **Next.js**, **FastAPI**, **LangGraph**, and **PostgreSQL with pgvector**. He extracts memories from every conversation, schedules his own reminders, sends messages across iMessage / SMS / WhatsApp, and runs code — all locally on your Mac.
+Edward is a full-stack AI assistant built on **Next.js**, **FastAPI**, and **PostgreSQL with pgvector**. He extracts memories from every conversation, schedules his own reminders, sends messages over WhatsApp, and runs code — reached from a phone PWA, a desktop browser, and WhatsApp.
 
 Unlike chat wrappers, Edward has persistent memory, background autonomy, a multi-agent orchestrator that spawns worker agents for parallel tasks, and a self-evolution engine that lets him propose, test, and deploy improvements to his own codebase.
 
@@ -68,49 +68,42 @@ Unlike chat wrappers, Edward has persistent memory, background autonomy, a multi
 | | | | |
 |:--|:--|:--|:--|
 | 🧠 **Long-Term Memory** | Hybrid vector + keyword recall | 📅 **Scheduled Events** | One-time & cron recurring |
-| 💬 **Multi-Channel Messaging** | iMessage, SMS, WhatsApp | 🐍 **Code Execution** | Python, JS, SQL, Shell sandboxes |
-| 🍎 **Apple Services** | Calendar, Mail, Reminders, Notes | 🔍 **Web Search** | Brave Search + page extraction |
-| 📄 **Document Store** | Semantic search over saved docs | 🔌 **Custom MCP Servers** | Self-serve install at runtime |
-| 🤖 **Multi-Agent Orchestrator** | Spawns parallel worker agents | 🧬 **Self-Evolution** | Proposes, tests, and deploys its own upgrades |
-| 🔔 **Push Notifications** | Web Push via VAPID | 💾 **File Storage** | Persistent files with tags |
+| 💬 **WhatsApp** | Send/receive via a Baileys bridge | 🐍 **Code Execution** | Python, JS, SQL, Shell sandboxes |
+| 🔍 **Web Search** | Brave Search + page extraction | 📄 **Document Store** | Semantic search over saved docs |
+| 🔌 **Custom MCP Servers** | Self-serve install at runtime | 🤖 **Multi-Agent Orchestrator** | Spawns parallel worker agents |
+| 🧬 **Self-Evolution** | Proposes, tests, and deploys its own upgrades | 🔔 **Push Notifications** | Web Push via VAPID |
 
 ## Quick Start
 
-```bash
-git clone https://github.com/ben4mn/meet-edward.git && cd meet-edward
-./setup.sh            # Installs PostgreSQL, pgvector, Python & Node deps
-./restart.sh           # Starts backend (:8000) + frontend (:3000)
+```powershell
+git clone https://github.com/ben4mn/meet-edward.git; cd meet-edward
+.\setup.ps1                    # Installs Python & Node deps, starts PostgreSQL in Docker
+.\restart.ps1                  # Starts backend (:8000) + frontend (:3001)
 ```
 
-Add your Anthropic API key to `.env` — that's the only required variable. Open [localhost:3000](http://localhost:3000) and set a password on first visit.
+Add your Anthropic API key to `.env` — that's the only required variable. Open [localhost:3001](http://localhost:3001) and set a password on first visit.
 
-> **Prerequisites:** macOS, [Homebrew](https://brew.sh), Python 3.11+, Node.js 18+, [Anthropic API key](https://console.anthropic.com/)
+> **Prerequisites:** Windows 11, PowerShell, Docker (PostgreSQL with pgvector runs in the `edward-pg` container), Node.js 18+, Python 3.11+, [Anthropic API key](https://console.anthropic.com/)
 
 ## Architecture
 
 ```
-Frontend (Next.js :3000)  →  Backend (FastAPI :8000)  →  PostgreSQL (:5432)
+Frontend (Next.js :3001)  →  Backend (FastAPI :8000)  →  PostgreSQL (:5432, Docker)
                                       ↓
-                              LangGraph Agent
-                           (preprocess → retrieve
-                            memory → respond →
-                            extract memory)
+                              Chat turn loop
+                           (retrieve memory →
+                            LLM call → tools →
+                            stream → extract memory)
                                       ↓
-                              Claude API (Anthropic)
+                     Codex OAuth (chat) · Claude Haiku (background)
 ```
-
-The backend runs natively on macOS (not in Docker) to support iMessage, AppleScript, and the scheduled event scheduler.
-
-## Platform Support
-
-Edward is built for macOS, where it integrates with iMessage, Calendar, Mail, and other Apple services. On **Windows** (via WSL) or **Linux**, the core assistant — memory, chat, scheduling, code execution, orchestration, and evolution — works fully. You lose Apple-specific integrations but gain access to alternative messaging via MCP servers (Discord, Telegram, Signal, Slack). See the [Platform Support](https://meet-edward.com/docs/platform-support) docs for setup details.
 
 <details>
 <summary><strong>Background Systems</strong></summary>
 
 | System | Description |
 |--------|-------------|
-| Heartbeat | Monitors iMessage, Calendar, and Mail; triages by urgency |
+| Heartbeat | Monitors WhatsApp; triages by urgency |
 | Memory Reflection | Post-turn enrichment via related memory queries |
 | Deep Retrieval | Pre-turn multi-query search for complex conversations |
 | Memory Consolidation | Hourly clustering of related memories |
@@ -125,14 +118,12 @@ Copy [`.env.example`](.env.example) to `.env` and configure:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | Claude API key |
+| `ANTHROPIC_API_KEY` | Yes | Claude Haiku key for background jobs |
 | `BRAVE_SEARCH_API_KEY` | No | Enables web search |
-| `TWILIO_ACCOUNT_SID` / `AUTH_TOKEN` / `PHONE_NUMBER` | No | SMS & WhatsApp messaging |
-| `MCP_APPLE_ENABLED` | No | Apple Services (Calendar, Mail, etc.) |
+| `MCP_WHATSAPP_ENABLED` | No | WhatsApp via the Baileys bridge |
 | `VAPID_PUBLIC_KEY` / `PRIVATE_KEY` | No | Browser push notifications |
 | `JWT_SECRET_KEY` | No | Auth secret (auto-generates if unset) |
 | `GITHUB_TOKEN` | No | MCP server search via GitHub API |
-| `HTML_HOSTING_API_KEY` | No | HTML page hosting |
 
 See [`.env.example`](.env.example) for the full list.
 
@@ -150,28 +141,21 @@ Each skill is toggled from the settings page. Tools are dynamically bound to the
 | SQL Database | Per-conversation SQLite + persistent PostgreSQL schemas |
 | Shell/Bash | Sandboxed shell commands |
 | Brave Search | Web search + page extraction |
-| Twilio SMS | Send/receive SMS |
-| Twilio WhatsApp | Send/receive WhatsApp |
-| WhatsApp MCP | WhatsApp via whatsapp-mcp bridge |
-| iMessage | Send iMessages via AppleScript |
-| Apple Services | Calendar, Reminders, Notes, Mail, Contacts, Maps |
-| HTML Hosting | Create/manage hosted pages |
+| WhatsApp MCP | WhatsApp via the Baileys bridge |
 | Scheduled Events | Reminders, messages, and recurring tasks |
 
-Memory, documents, file storage, databases, widgets, push notifications, and contacts are always available.
+Memory, documents, scheduled events, push notifications, and contacts are always available.
 
 </details>
 
 ## Scripts
 
-```bash
-./setup.sh              # First-time setup (PostgreSQL, dependencies, .env)
-./restart.sh             # Restart both frontend and backend
-./restart.sh frontend    # Restart only frontend
-./restart.sh backend     # Restart only backend
+```powershell
+.\setup.ps1                    # First-time setup (Docker Postgres, dependencies, .env)
+.\restart.ps1                  # Restart both frontend and backend
+.\restart.ps1 frontend         # Restart only frontend
+.\restart.ps1 backend          # Restart only backend
 ```
-
-Logs: `/tmp/edward-backend.log` and `/tmp/edward-frontend.log`
 
 ## Contributing
 

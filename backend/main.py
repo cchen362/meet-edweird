@@ -1,7 +1,6 @@
-import sys
 import asyncio
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# D-001-1: Windows is the only supported platform; no sys.platform branches anywhere.
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +9,8 @@ from contextlib import asynccontextmanager
 import logging
 import os
 
-from routers import chat, settings, debug, memories, conversations, webhooks, skills, events, auth, push, documents, files, widget, databases, heartbeat, custom_mcp, consolidation, evolution, orchestrator
-from services.database import init_db, DATABASE_URL
-from services.graph import initialize_checkpoint_store
+from routers import chat, settings, debug, memories, conversations, webhooks, skills, events, auth, push, documents, heartbeat, custom_mcp, consolidation, evolution, orchestrator
+from services.database import init_db
 
 # Governance measurement log — persists turn samples to backend/logs/governance.jsonl
 _gov_log_path = os.path.join(os.path.dirname(__file__), "logs", "governance.jsonl")
@@ -27,11 +25,6 @@ _gov_logger.setLevel(logging.DEBUG)
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
-    await initialize_checkpoint_store(DATABASE_URL)
-
-    # Ensure file storage directory exists
-    from services.file_storage_service import ensure_storage_dir
-    ensure_storage_dir()
 
     # Initialize skills service (manages MCP and other integrations)
     try:
@@ -40,18 +33,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Skills initialization error: {e}")
 
-    # Initialize MCP clients (optional, won't fail if unavailable)
+    # Initialize WhatsApp bridge (optional, won't fail if unavailable)
     try:
-        from services.mcp_client import initialize_whatsapp_mcp
-        await initialize_whatsapp_mcp()
+        from services.whatsapp_bridge_client import initialize_bridge
+        await initialize_bridge()
     except Exception as e:
-        print(f"WhatsApp MCP initialization skipped: {e}")
-
-    try:
-        from services.mcp_client import initialize_apple_mcp
-        await initialize_apple_mcp()
-    except Exception as e:
-        print(f"Apple Services MCP initialization skipped: {e}")
+        print(f"WhatsApp bridge initialization skipped: {e}")
 
     # Initialize custom MCP servers (Edward-added servers from DB)
     try:
@@ -81,7 +68,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Scheduler initialization error: {e}")
 
-    # Start the heartbeat system (iMessage listener + triage loop)
+    # Start the heartbeat system (WhatsApp listener + triage loop)
     try:
         from services.heartbeat import start_heartbeat
         await start_heartbeat()
@@ -149,17 +136,10 @@ async def lifespan(app: FastAPI):
         print(f"Custom MCP servers shutdown error: {e}")
 
     try:
-        from services.mcp_client import shutdown_whatsapp_mcp, shutdown_apple_mcp
-        await shutdown_whatsapp_mcp()
-        await shutdown_apple_mcp()
+        from services.whatsapp_bridge_client import shutdown_bridge
+        await shutdown_bridge()
     except Exception as e:
-        print(f"MCP shutdown error: {e}")
-
-    try:
-        from services.graph import shutdown_legacy_graph
-        await shutdown_legacy_graph()
-    except Exception as e:
-        print(f"Legacy graph shutdown error: {e}")
+        print(f"WhatsApp bridge shutdown error: {e}")
 
 
 app = FastAPI(
@@ -204,9 +184,6 @@ app.include_router(events.router, prefix="/api", tags=["events"])
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(push.router, prefix="/api", tags=["push"])
 app.include_router(documents.router, prefix="/api", tags=["documents"])
-app.include_router(files.router, prefix="/api", tags=["files"])
-app.include_router(widget.router, prefix="/api", tags=["widget"])
-app.include_router(databases.router, prefix="/api", tags=["databases"])
 app.include_router(heartbeat.router, prefix="/api", tags=["heartbeat"])
 app.include_router(custom_mcp.router, prefix="/api", tags=["custom-mcp"])
 app.include_router(consolidation.router, prefix="/api", tags=["consolidation"])

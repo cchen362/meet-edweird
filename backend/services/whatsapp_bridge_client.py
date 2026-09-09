@@ -12,7 +12,6 @@ The bridge provides:
 import asyncio
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -82,33 +81,24 @@ async def _start_bridge_process() -> bool:
 
     # Kill any existing process on the bridge port (stale from previous run)
     try:
-        if sys.platform == "win32":
-            result = subprocess.run(
-                ["netstat", "-ano"], capture_output=True, text=True, timeout=5
-            )
-            for line in result.stdout.splitlines():
-                if f":{BRIDGE_PORT}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    pid = parts[-1]
-                    if pid.isdigit() and int(pid) != os.getpid():
-                        subprocess.run(["taskkill", "/F", "/PID", pid],
-                                       capture_output=True, timeout=5)
-                        print(f"[WhatsApp Bridge] Killed stale process on port {BRIDGE_PORT} (PID {pid})")
-        else:
-            subprocess.run(
-                ["fuser", "-k", f"{BRIDGE_PORT}/tcp"],
-                capture_output=True, timeout=5
-            )
+        result = subprocess.run(
+            ["netstat", "-ano"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if f":{BRIDGE_PORT}" in line and "LISTENING" in line:
+                parts = line.split()
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) != os.getpid():
+                    subprocess.run(["taskkill", "/F", "/PID", pid],
+                                   capture_output=True, timeout=5)
+                    print(f"[WhatsApp Bridge] Killed stale process on port {BRIDGE_PORT} (PID {pid})")
     except Exception:
         pass  # Best-effort cleanup
 
     # Spawn bridge process
     env = {**os.environ, "WHATSAPP_BRIDGE_PORT": BRIDGE_PORT}
-    # On Windows, shell=False with node directly
-    node_cmd = "node"
-    if sys.platform == "win32":
-        # Ensure node is found on Windows
-        node_cmd = "node.exe"
+    # Ensure node is found on Windows
+    node_cmd = "node.exe"
 
     try:
         _bridge_process = subprocess.Popen(

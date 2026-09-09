@@ -1,7 +1,7 @@
 """
 ToolRegistry: Unified tool management for Edward.
 
-Collects tools from multiple sources (memory, messaging, MCP) and filters
+Collects tools from multiple sources (memory, WhatsApp, MCP) and filters
 based on skill enabled state from the database.
 """
 
@@ -11,20 +11,13 @@ from typing import List, Any, Dict
 # Skill-to-tool mapping
 # Maps skill IDs to the tool names they gate
 SKILL_TOOL_MAPPING: Dict[str, List[str]] = {
-    "twilio_sms": ["send_sms"],
-    "twilio_whatsapp": ["send_whatsapp"],
-    "imessage_applescript": ["send_imessage", "get_recent_messages"],
     "code_interpreter": ["execute_code", "list_sandbox_files", "read_sandbox_file"],
     "javascript_interpreter": ["execute_javascript", "list_sandbox_files", "read_sandbox_file"],
     "sql_interpreter": [
         "execute_sql", "list_sandbox_files", "read_sandbox_file",
-        "create_persistent_db", "query_persistent_db", "list_persistent_dbs", "delete_persistent_db",
     ],
     "shell_interpreter": ["execute_shell", "list_sandbox_files", "read_sandbox_file"],
     "brave_search": ["web_search", "fetch_page_content"],
-    "html_hosting": ["create_hosted_page", "update_hosted_page", "delete_hosted_page", "check_hosted_slug"],
-    "ios_widget": ["update_widget", "get_widget_state_tool"],
-    "contacts_lookup": ["lookup_contact", "lookup_phone"],
     "orchestrator": ["spawn_worker", "check_worker", "list_workers", "cancel_worker", "wait_for_workers", "send_to_worker", "spawn_cc_worker"],
     "notebooklm": [
         # Notebook management
@@ -46,7 +39,7 @@ SKILL_TOOL_MAPPING: Dict[str, List[str]] = {
         # Notes
         "nlm_note",
         # Edward bridge tools
-        "nlm_push_document", "nlm_push_file",
+        "nlm_push_document",
     ],
     # "whatsapp_mcp" and "apple_services" tools are handled dynamically since they come from MCP
 }
@@ -102,20 +95,13 @@ async def _get_skill_states(force_refresh: bool = False) -> Dict[str, bool]:
     from services.skills_service import is_skill_enabled
 
     _skill_cache = {
-        "twilio_sms": await is_skill_enabled("twilio_sms"),
-        "twilio_whatsapp": await is_skill_enabled("twilio_whatsapp"),
-        "imessage_applescript": await is_skill_enabled("imessage_applescript"),
         "whatsapp_mcp": await is_skill_enabled("whatsapp_mcp"),
         "brave_search": await is_skill_enabled("brave_search"),
         "code_interpreter": await is_skill_enabled("code_interpreter"),
         "javascript_interpreter": await is_skill_enabled("javascript_interpreter"),
         "sql_interpreter": await is_skill_enabled("sql_interpreter"),
         "shell_interpreter": await is_skill_enabled("shell_interpreter"),
-        "contacts_lookup": await is_skill_enabled("contacts_lookup"),
         "push_notifications": await is_skill_enabled("push_notifications"),
-        "apple_services": await is_skill_enabled("apple_services"),
-        "html_hosting": await is_skill_enabled("html_hosting"),
-        "ios_widget": await is_skill_enabled("ios_widget"),
         "orchestrator": await is_skill_enabled("orchestrator"),
         "notebooklm": await is_skill_enabled("notebooklm"),
     }
@@ -134,12 +120,6 @@ def _get_document_tools() -> List[Any]:
     """Get document tools (always available)."""
     from services.graph.tools import DOCUMENT_TOOLS
     return DOCUMENT_TOOLS
-
-
-def _get_file_storage_tools() -> List[Any]:
-    """Get file storage tools (always available)."""
-    from services.graph.tools import FILE_STORAGE_TOOLS
-    return FILE_STORAGE_TOOLS
 
 
 def _get_plan_tools() -> List[Any]:
@@ -171,51 +151,6 @@ async def _get_push_notification_tools(skill_states: Dict[str, bool]) -> List[An
 
     from services.graph.tools import PUSH_NOTIFICATION_TOOLS
     return PUSH_NOTIFICATION_TOOLS
-
-
-def _get_messaging_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """
-    Get messaging tools filtered by skill enabled state.
-
-    Args:
-        skill_states: Dict of skill_id -> enabled
-
-    Returns:
-        List of enabled messaging tools
-    """
-    from services.graph.tools import (
-        send_sms,
-        send_whatsapp,
-        send_imessage,
-        get_recent_messages,
-        send_message,
-    )
-
-    tools = []
-
-    # send_sms: gated by twilio_sms
-    if skill_states.get("twilio_sms"):
-        tools.append(send_sms)
-
-    # send_whatsapp: gated by twilio_whatsapp
-    if skill_states.get("twilio_whatsapp"):
-        tools.append(send_whatsapp)
-
-    # send_imessage, get_recent_messages: gated by imessage_applescript
-    if skill_states.get("imessage_applescript"):
-        tools.append(send_imessage)
-        tools.append(get_recent_messages)
-
-    # send_message: available if ANY messaging skill is enabled
-    any_messaging_enabled = (
-        skill_states.get("twilio_sms") or
-        skill_states.get("twilio_whatsapp") or
-        skill_states.get("imessage_applescript")
-    )
-    if any_messaging_enabled:
-        tools.append(send_message)
-
-    return tools
 
 
 def _get_whatsapp_mcp_tools(skill_states: Dict[str, bool]) -> List[Any]:
@@ -254,24 +189,6 @@ def _get_search_tools(skill_states: Dict[str, bool]) -> List[Any]:
     return [web_search, fetch_page_content]
 
 
-def _get_html_hosting_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get HTML hosting tools if html_hosting is enabled."""
-    if not skill_states.get("html_hosting"):
-        return []
-
-    from services.graph.tools import HTML_HOSTING_TOOLS
-    return HTML_HOSTING_TOOLS
-
-
-def _get_widget_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get iOS widget tools if ios_widget is enabled."""
-    if not skill_states.get("ios_widget"):
-        return []
-
-    from services.graph.tools import WIDGET_TOOLS
-    return WIDGET_TOOLS
-
-
 def _get_code_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
     """
     Get code execution tools if code_interpreter is enabled.
@@ -303,8 +220,8 @@ def _get_sql_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
     if not skill_states.get("sql_interpreter"):
         return []
 
-    from services.graph.tools import SQL_EXECUTION_TOOLS, PERSISTENT_DB_TOOLS
-    return SQL_EXECUTION_TOOLS + PERSISTENT_DB_TOOLS
+    from services.graph.tools import SQL_EXECUTION_TOOLS
+    return SQL_EXECUTION_TOOLS
 
 
 def _get_shell_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
@@ -314,38 +231,6 @@ def _get_shell_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
 
     from services.graph.tools import SHELL_EXECUTION_TOOLS
     return SHELL_EXECUTION_TOOLS
-
-
-def _get_contacts_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get contacts tools if contacts_lookup is enabled."""
-    if not skill_states.get("contacts_lookup"):
-        return []
-
-    from services.graph.tools import CONTACTS_TOOLS
-    return CONTACTS_TOOLS
-
-
-def _get_apple_mcp_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """
-    Get Apple Services MCP tools if apple_services is enabled.
-
-    Provides access to Calendar, Reminders, Notes, Mail, Contacts, Maps.
-
-    Args:
-        skill_states: Dict of skill_id -> enabled
-
-    Returns:
-        List of Apple Services MCP tools (LangChain-compatible)
-    """
-    if not skill_states.get("apple_services"):
-        return []
-
-    from services.mcp_client import get_apple_mcp_tools, is_apple_available
-
-    if not is_apple_available():
-        return []
-
-    return get_apple_mcp_tools()
 
 
 def _get_orchestrator_tools(skill_states: Dict[str, bool]) -> List[Any]:
@@ -407,9 +292,6 @@ async def get_available_tools() -> List[Any]:
     # Document tools are always available
     add_tools(_get_document_tools())
 
-    # File storage tools are always available
-    add_tools(_get_file_storage_tools())
-
     # Plan tools are always available
     tools.extend(_get_plan_tools())
 
@@ -422,26 +304,11 @@ async def get_available_tools() -> List[Any]:
     # Push notification tools (available when skill enabled and VAPID keys configured)
     add_tools(await _get_push_notification_tools(skill_states))
 
-    # Add enabled messaging tools
-    add_tools(_get_messaging_tools(skill_states))
-
     # Add WhatsApp MCP tools if enabled
     add_tools(_get_whatsapp_mcp_tools(skill_states))
 
-    # Add Apple Services MCP tools if enabled
-    add_tools(_get_apple_mcp_tools(skill_states))
-
     # Add search tools if enabled
     add_tools(_get_search_tools(skill_states))
-
-    # Add HTML hosting tools if enabled
-    add_tools(_get_html_hosting_tools(skill_states))
-
-    # Add iOS widget tools if enabled
-    add_tools(_get_widget_tools(skill_states))
-
-    # Add contacts tools if enabled
-    add_tools(_get_contacts_tools(skill_states))
 
     # Add execution tools if enabled
     add_tools(_get_code_execution_tools(skill_states))
@@ -481,19 +348,14 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     from services.graph.tools import (
         get_memory_tools_description,
         get_document_tools_description,
-        get_file_storage_tools_description,
         get_plan_tools_description,
         get_scheduled_event_tools_description,
-        get_contacts_tools_description,
-        get_messaging_tools_description,
         get_search_tools_description,
         get_code_execution_tools_description,
         get_javascript_execution_tools_description,
         get_sql_execution_tools_description,
         get_shell_execution_tools_description,
         get_push_notification_tools_description,
-        get_html_hosting_tools_description,
-        get_widget_tools_description,
         get_heartbeat_tools_description,
     )
 
@@ -510,10 +372,6 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     if any(name in tool_names for name in ["save_document", "read_document", "edit_document", "search_documents", "list_documents", "delete_document"]):
         sections.append(get_document_tools_description())
 
-    # File storage tools section (always included)
-    if any(name in tool_names for name in ["save_to_storage", "list_storage_files", "get_storage_file_url", "read_storage_file", "delete_storage_file", "tag_storage_file"]):
-        sections.append(get_file_storage_tools_description())
-
     # Plan tools section (always included)
     if any(name in tool_names for name in ["create_plan", "update_plan_step", "edit_plan", "complete_plan"]):
         sections.append(get_plan_tools_description())
@@ -526,18 +384,9 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     if "review_heartbeat" in tool_names:
         sections.append(get_heartbeat_tools_description())
 
-    # Messaging tools section
-    messaging_tools = ["send_sms", "send_whatsapp", "send_imessage", "get_recent_messages", "send_message"]
-    if any(name in tool_names for name in messaging_tools):
-        sections.append(get_messaging_tools_description())
-
     # Search tools section
     if any(name in tool_names for name in ["web_search", "fetch_page_content"]):
         sections.append(get_search_tools_description())
-
-    # Contacts tools section
-    if any(name in tool_names for name in ["lookup_contact", "lookup_phone"]):
-        sections.append(get_contacts_tools_description())
 
     # Code execution tools section
     if "execute_code" in tool_names:
@@ -559,14 +408,6 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     if "send_push_notification" in tool_names:
         sections.append(get_push_notification_tools_description())
 
-    # HTML hosting tools section
-    if "create_hosted_page" in tool_names:
-        sections.append(get_html_hosting_tools_description())
-
-    # iOS widget tools section
-    if "update_widget" in tool_names:
-        sections.append(get_widget_tools_description())
-
     # Evolution tools section
     if "trigger_self_evolution" in tool_names:
         from services.graph.tools import get_evolution_tools_description
@@ -586,10 +427,6 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     # Sentinel: github-mcp-server always exposes "get_me" (prefixed as "github_get_me" by custom MCP)
     if "get_me" in tool_names or "github_get_me" in tool_names:
         sections.append(_get_github_mcp_description())
-
-    # Apple Reminders tools section (special guidance to avoid confusion with scheduled events)
-    if any(name.startswith("reminders_") for name in tool_names):
-        sections.append(_get_apple_reminders_description())
 
     # Custom MCP self-service tools section
     if any(name in tool_names for name in ["search_mcp_servers", "add_mcp_server", "list_custom_servers", "remove_mcp_server", "update_mcp_server", "restart_mcp_server"]):
@@ -615,26 +452,6 @@ and content — and wait for the user to explicitly confirm before calling the t
 Example: "I'm about to open an issue titled 'X' in org/repo. Shall I proceed?"
 
 Read-only tools (list_*, get_*, search_*) do not require confirmation."""
-
-
-def _get_apple_reminders_description() -> str:
-    """Get special guidance for Apple Reminders tools."""
-    return """## Apple Reminders (User's Personal System)
-
-IMPORTANT: These are the USER'S personal Apple Reminders - NOT for Edward's tracking.
-
-ONLY use reminders_ tools when user explicitly asks:
-- "Add to my reminders"
-- "Check my reminders list"
-- "Show my Apple Reminders"
-- "Create a reminder in Apple Reminders"
-
-DO NOT use for:
-- Edward's scheduled events (use schedule_event instead)
-- Internal task tracking
-- Anything not explicitly requested by the user
-
-When the user asks to "remind me" without specifying Apple Reminders, use schedule_event instead."""
 
 
 def _get_custom_mcp_description() -> str:
@@ -668,20 +485,5 @@ async def get_worker_tools() -> List[Any]:
     excluded = EVOLUTION_TOOL_NAMES | ORCHESTRATOR_TOOL_NAMES
     all_tools = await get_available_tools()
     return [t for t in all_tools if t.name not in excluded]
-
-
-async def is_any_messaging_enabled() -> bool:
-    """
-    Check if any messaging skill is enabled.
-
-    Used by send_message to determine if it should be available.
-    """
-    skill_states = await _get_skill_states()
-    return (
-        skill_states.get("twilio_sms") or
-        skill_states.get("twilio_whatsapp") or
-        skill_states.get("imessage_applescript") or
-        skill_states.get("whatsapp_mcp")
-    )
 
 

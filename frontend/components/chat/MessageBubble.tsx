@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { User, AlertCircle, FileText, Download, X, Copy, Check, Activity, Clock } from "lucide-react";
+import { User, AlertCircle, FileText, X, Copy, Check, Activity, Clock } from "lucide-react";
 import { EdwardAvatar } from "@/components/EdwardAvatar";
 import { MarkdownContent } from "./MarkdownContent";
 import { CodeBlock } from "./CodeBlock";
@@ -23,7 +23,7 @@ function formatFileSize(bytes: number): string {
 
 function AttachmentImage({ attachment }: { attachment: MessageAttachment }) {
   const [fullscreen, setFullscreen] = useState(false);
-  const src = attachment.preview_url || (attachment.file_id ? `/api/files/${attachment.file_id}/download` : undefined);
+  const src = attachment.preview_url;
 
   if (!src) return null;
 
@@ -61,23 +61,11 @@ function AttachmentImage({ attachment }: { attachment: MessageAttachment }) {
 }
 
 function AttachmentBadge({ attachment }: { attachment: MessageAttachment }) {
-  const downloadUrl = attachment.file_id ? `/api/files/${attachment.file_id}/download` : undefined;
-
   return (
     <div className="inline-flex items-center gap-1.5 bg-surface-elevated/50 border border-border rounded-md px-2 py-1 text-xs">
       <FileText className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
       <span className="text-text-secondary truncate max-w-[150px]">{attachment.filename}</span>
       <span className="text-text-muted">{formatFileSize(attachment.size)}</span>
-      {downloadUrl && (
-        <a
-          href={downloadUrl}
-          download={attachment.filename}
-          className="text-terminal hover:text-terminal/80 ml-0.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Download className="w-3 h-3" />
-        </a>
-      )}
     </div>
   );
 }

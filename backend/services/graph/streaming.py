@@ -3,7 +3,6 @@ import copy
 import hashlib
 import json as _json
 import re
-import sys
 import time
 from datetime import datetime
 from typing import AsyncGenerator, List, Any, Dict, Optional
@@ -79,16 +78,6 @@ When genuinely uncertain about intent, pick the most reasonable interpretation a
 
 For complex multi-step work, call create_plan() first so the user can see your approach. For tasks likely to take more than ~45 seconds, prefer spawn_cc_worker() or spawn_worker() and tell the user what was delegated.
 """
-
-
-def _build_platform_context() -> str:
-    """Build platform-aware context for the system prompt."""
-    if sys.platform == "darwin":
-        return "\n\n## Platform\nRunning on macOS. All capabilities available including iMessage, Apple Services, and Contacts."
-    elif sys.platform == "win32":
-        return "\n\n## Platform\nRunning on Windows. Apple-specific features (iMessage, Apple Contacts, Apple Services) are unavailable. Use push notifications, Twilio, or web chat for messaging."
-    else:
-        return "\n\n## Platform\nRunning on Linux. Apple-specific features are unavailable."
 
 
 # Event types for structured SSE streaming
@@ -173,20 +162,18 @@ async def execute_tool_call_with_events(
     tool_args = tool_call.get("args", {})
 
     # Execution tool detection maps
-    EXECUTION_TOOL_NAMES = {"execute_code", "execute_javascript", "execute_sql", "execute_shell", "query_persistent_db"}
+    EXECUTION_TOOL_NAMES = {"execute_code", "execute_javascript", "execute_sql", "execute_shell"}
     TOOL_LANGUAGE_MAP = {
         "execute_code": "python",
         "execute_javascript": "javascript",
         "execute_sql": "sql",
         "execute_shell": "bash",
-        "query_persistent_db": "sql",
     }
     TOOL_CODE_ARG = {
         "execute_code": "code",
         "execute_javascript": "code",
         "execute_sql": "query",
         "execute_shell": "command",
-        "query_persistent_db": "query",
     }
 
     # Emit tool_start event
@@ -1349,15 +1336,6 @@ _TOOL_LABELS: Dict[str, str] = {
     # Web
     "web_search": "Searching the web",
     "fetch_page_content": "Reading page",
-    # Messaging
-    "send_message": "Sending message",
-    "send_sms": "Sending SMS",
-    "send_whatsapp": "Sending WhatsApp",
-    "send_imessage": "Sending iMessage",
-    "get_recent_messages": "Reading messages",
-    # Contacts
-    "lookup_contact": "Looking up contact",
-    "lookup_phone": "Looking up phone number",
     # Documents
     "save_document": "Saving document",
     "read_document": "Reading document",
@@ -1376,29 +1354,8 @@ _TOOL_LABELS: Dict[str, str] = {
     "execute_shell": "Running shell command",
     "list_sandbox_files": "Listing sandbox files",
     "read_sandbox_file": "Reading sandbox file",
-    # File storage
-    "save_to_storage": "Saving to storage",
-    "list_storage_files": "Listing files",
-    "get_storage_file_url": "Getting file URL",
-    "read_storage_file": "Reading file",
-    "tag_storage_file": "Tagging file",
-    "delete_storage_file": "Deleting file",
-    # Persistent databases
-    "create_persistent_db": "Creating database",
-    "query_persistent_db": "Querying database",
-    "list_persistent_dbs": "Listing databases",
-    "delete_persistent_db": "Deleting database",
-    # Push / widget
+    # Push
     "send_push_notification": "Sending notification",
-    "update_widget": "Updating widget",
-    "get_widget_state_tool": "Reading widget state",
-    "update_widget_code": "Updating widget code",
-    "clear_widget_code": "Clearing widget code",
-    # HTML hosting
-    "create_hosted_page": "Publishing page",
-    "update_hosted_page": "Updating page",
-    "delete_hosted_page": "Deleting page",
-    "check_hosted_slug": "Checking URL slug",
     # Custom MCP
     "search_mcp_servers": "Searching MCP servers",
     "add_mcp_server": "Adding MCP server",
@@ -1452,7 +1409,6 @@ _TOOL_LABELS: Dict[str, str] = {
     "nlm_share_invite": "Inviting collaborator",
     "nlm_note": "Managing note",
     "nlm_push_document": "Pushing document to notebook",
-    "nlm_push_file": "Pushing file to notebook",
 }
 
 
@@ -1576,7 +1532,6 @@ async def stream_with_memory_events(
     static_system = (
         system_prompt
         + EDWARD_CHARACTER
-        + _build_platform_context()
     )
     dynamic_context = memory_context + briefing_context + time_context
 
@@ -2028,7 +1983,6 @@ async def chat_with_memory(
     static_system = (
         system_prompt
         + EDWARD_CHARACTER
-        + _build_platform_context()
     )
     dynamic_context = memory_context + briefing_context_sync + orchestrator_context + time_context
 

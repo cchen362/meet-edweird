@@ -44,7 +44,7 @@ async def update_skill(skill_id: str, request: SkillUpdateRequest):
     Enable or disable a skill.
 
     Args:
-        skill_id: The skill identifier (e.g., 'twilio_sms', 'imessage_applescript')
+        skill_id: The skill identifier (e.g., 'whatsapp_mcp', 'brave_search')
         request: Contains 'enabled' boolean
 
     Returns:

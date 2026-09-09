@@ -1,7 +1,7 @@
 """
 MCPToolWrapper: Wraps MCP server tools to match EdwardTool interface.
 
-Used by mcp_client.py (Apple Services) and custom_mcp_service.py (custom servers).
+Used by custom_mcp_service.py (custom MCP servers).
 Provides .name, .description, .args_schema, .ainvoke() — same as EdwardTool.
 """
 

@@ -7,14 +7,10 @@ import {
   Zap,
   RefreshCw,
   AlertCircle,
-  MessageSquare,
-  Phone,
   Search,
   Code,
   Database,
   Terminal,
-  Globe,
-  Smartphone,
 } from "lucide-react";
 import {
   getSkills,
@@ -102,12 +98,6 @@ function Toggle({
 
 // Get icon for skill type
 function getSkillIcon(skillId: string) {
-  if (skillId.includes("imessage")) {
-    return <MessageSquare className="w-4 h-4" />;
-  }
-  if (skillId.includes("twilio") || skillId.includes("sms")) {
-    return <Phone className="w-4 h-4" />;
-  }
   if (skillId.includes("search") || skillId.includes("brave")) {
     return <Search className="w-4 h-4" />;
   }
@@ -119,12 +109,6 @@ function getSkillIcon(skillId: string) {
   }
   if (skillId.includes("shell")) {
     return <Terminal className="w-4 h-4" />;
-  }
-  if (skillId.includes("html_hosting")) {
-    return <Globe className="w-4 h-4" />;
-  }
-  if (skillId.includes("widget")) {
-    return <Smartphone className="w-4 h-4" />;
   }
   return <Zap className="w-4 h-4" />;
 }

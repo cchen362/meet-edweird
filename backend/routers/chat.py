@@ -33,7 +33,7 @@ async def _parse_chat_request(request: Request):
 
     Returns:
         Tuple of (message, conversation_id, attachments)
-        where attachments is a list of dicts with keys: filename, mime_type, data (base64), size, file_id
+        where attachments is a list of dicts with keys: filename, mime_type, data (base64), size
     """
     content_type = request.headers.get("content-type", "")
 
@@ -59,29 +59,11 @@ async def _parse_chat_request(request: Request):
                 mime_type = upload_file.content_type or "application/octet-stream"
                 filename = upload_file.filename or "unnamed"
 
-                # Store file in persistent storage
-                file_id = None
-                try:
-                    from services.file_storage_service import store_file, ALLOWED_MIME_TYPES
-                    # Temporarily add chat attachment types to allowed list if needed
-                    stored = await store_file(
-                        file_data=file_data,
-                        filename=filename,
-                        mime_type=mime_type,
-                        category="upload",
-                        source="user",
-                        conversation_id=conversation_id,
-                    )
-                    file_id = stored.id
-                except Exception as e:
-                    print(f"Failed to store uploaded file: {e}")
-
                 attachments.append({
                     "filename": filename,
                     "mime_type": mime_type,
                     "data": base64.standard_b64encode(file_data).decode("utf-8"),
                     "size": len(file_data),
-                    "file_id": file_id,
                 })
 
         return message, conversation_id, attachments

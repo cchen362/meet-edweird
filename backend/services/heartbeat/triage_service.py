@@ -162,23 +162,14 @@ REPLY_TRIGGER = (
 )
 
 
-def _build_channel_guidance(source: str = "imessage") -> str:
+def _build_channel_guidance(source: str = "whatsapp") -> str:
     """Build channel-specific guidance for heartbeat triggers."""
-    if source == "imessage":
-        return (
-            'Respond via send_imessage for this iMessage conversation.\n'
-            'IMPORTANT: Never include "@edward" in your message — it will re-trigger the heartbeat.'
-        )
-    elif source == "whatsapp":
+    if source == "whatsapp":
         return (
             'Respond via whatsapp_send_message for this WhatsApp conversation. '
             'The chat_id is provided in the event context — pass it as the chat_id argument.\n'
             'IMPORTANT: Never include "@edward" in your message — it will re-trigger the heartbeat.'
         )
-    elif source == "email":
-        return "This came from email. Store relevant context and consider whether a reply is needed."
-    elif source == "calendar":
-        return "This is a calendar event notification."
     else:
         return "Use the appropriate messaging tool to respond."
 
@@ -209,83 +200,7 @@ async def _rule_pre_filter(
     for event in events:
         text = event.summary or ""
 
-        # ===== Calendar-specific rules =====
-        if event.source == "calendar":
-            # Dismiss all-day events
-            is_all_day = False
-            if event.raw_data:
-                try:
-                    raw = json.loads(event.raw_data)
-                    is_all_day = raw.get("is_all_day", raw.get("isAllDay", False))
-                    # Also check duration > 23h
-                    start_str = raw.get("start_date", raw.get("startDate", raw.get("start", "")))
-                    end_str = raw.get("end_date", raw.get("endDate", raw.get("end", "")))
-                    if start_str and end_str and not is_all_day:
-                        try:
-                            s = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                            e = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                            if (e - s).total_seconds() > 23 * 3600:
-                                is_all_day = True
-                        except (ValueError, TypeError):
-                            pass
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            if "all day" in text.lower():
-                is_all_day = True
-
-            if is_all_day:
-                event.triage_status = "dismissed"
-                dismissed_count += 1
-                continue
-
-            # Fast-track events tagged [STARTING SOON]
-            if "[STARTING SOON]" in text:
-                event.triage_status = "calendar_urgent"
-                mentions.append(event)  # fast-track to Layer 3
-                continue
-
-            # Other calendar events survive to Layer 2
-            surviving.append(event)
-            continue
-
-        # ===== Email-specific rules =====
-        if event.source == "email":
-            # Parse raw_data once for all email rules
-            raw = {}
-            if event.raw_data:
-                try:
-                    raw = json.loads(event.raw_data)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-            # Rule E1: Dismiss Apple ML marketing category (model_category == 3)
-            if raw.get("model_category") == 3:
-                event.triage_status = "dismissed"
-                dismissed_count += 1
-                continue
-
-            # Rule E2: Dismiss automated emails with no unsubscribe mechanism
-            if raw.get("automated_conversation") == 2 and raw.get("unsubscribe_type") == 0:
-                event.triage_status = "dismissed"
-                dismissed_count += 1
-                continue
-
-            # Fast-track @edward mentions in subject/body
-            raw_text = text
-            body = raw.get("body", raw.get("content", raw.get("snippet", ""))) or ""
-            if body:
-                raw_text = f"{text} {body}"
-
-            if MENTION_PATTERN.search(raw_text):
-                event.triage_status = "mention"
-                mentions.append(event)
-                continue
-
-            # All other email events survive to Layer 2
-            surviving.append(event)
-            continue
-
-        # ===== iMessage rules (existing) =====
+        # ===== Message rules =====
 
         # Rule 1: MENTION — @edward detected → fast-track to Layer 3
         # allowed_senders acts as a BLOCKLIST: those contacts CANNOT trigger via mention.
@@ -332,7 +247,7 @@ async def _rule_pre_filter(
             dismissed_count += 1
             continue
 
-        # Rule 6: DISMISS short codes (marketing SMS via iMessage)
+        # Rule 6: DISMISS short codes (marketing short codes)
         sender = event.sender or ""
         if SHORT_CODE_PATTERN.match(sender):
             event.triage_status = "dismissed"
@@ -515,44 +430,6 @@ async def _execute_classification(
         event.triage_status = "noted"
 
     elif action in ("ACT", "ESCALATE"):
-        # Email override: store note + push, but do NOT auto-reply via chat_with_memory
-        if event.source == "email":
-            note_content = (
-                classification.get("action_description")
-                or classification.get("note_content")
-                or classification.get("reasoning", "")
-            )
-            if note_content:
-                try:
-                    from services.memory_service import store_memory, Memory
-
-                    await store_memory(
-                        Memory(
-                            id=None,
-                            content=note_content,
-                            memory_type="context",
-                            importance=0.5,
-                            source_conversation_id=None,
-                        )
-                    )
-                except Exception as e:
-                    print(f"[Heartbeat] Failed to store email NOTE memory: {e}")
-
-            # Push notification for both ACT and ESCALATE on email
-            try:
-                from services.push_service import send_push_notification
-
-                await send_push_notification(
-                    title="Email needs attention",
-                    body=f"{event.sender or 'Someone'}: {(event.summary or '')[:100]}",
-                    tag="heartbeat-email",
-                )
-            except Exception as e:
-                print(f"[Heartbeat] Email push notification failed: {e}")
-
-            event.triage_status = "escalated" if action == "ESCALATE" else "noted"
-            return
-
         action_desc = (
             classification.get("action_description")
             or classification.get("reasoning", "")
@@ -596,42 +473,12 @@ async def _execute_classification(
                     )
             except Exception as e:
                 print(f"[Heartbeat] WhatsApp thread fetch failed: {e}")
-        elif event.chat_identifier:
-            try:
-                import asyncio
-                from services.heartbeat.listener_imessage import (
-                    get_chat_thread,
-                    format_chat_thread,
-                    _contact_name_cache,
-                    _resolve_contact_name,
-                )
-
-                thread_messages = await asyncio.to_thread(
-                    get_chat_thread, event.chat_identifier, 15
-                )
-                if thread_messages:
-                    # Pre-resolve unknown contacts in thread
-                    for msg in thread_messages:
-                        sender = msg.get("sender")
-                        if sender and sender != "me" and sender not in _contact_name_cache:
-                            await _resolve_contact_name(sender)
-
-                    thread_context = format_chat_thread(
-                        thread_messages, contact_cache=_contact_name_cache
-                    )
-                    print(
-                        f"[Heartbeat] Fetched {len(thread_messages)} thread messages "
-                        f"for {event.chat_identifier}"
-                    )
-            except Exception as e:
-                print(f"[Heartbeat] Thread fetch failed: {e}")
 
         # Run chat_with_memory — failure here should NOT block push notification
         try:
             from services.graph import chat_with_memory
             from services.graph.tools import set_current_conversation_id
             from services.settings_service import get_settings
-            from services.imessage_service import _recent_edward_sends
 
             settings = await get_settings()
 
@@ -682,11 +529,8 @@ async def _execute_classification(
                     channel_guidance=channel_guidance,
                 )
 
-            # Set conversation context so tools (send_imessage etc.) can find it
+            # Set conversation context so tools can find it
             set_current_conversation_id(conversation_id)
-
-            # Snapshot _recent_edward_sends length to detect if Edward sends an iMessage
-            sends_before = len(_recent_edward_sends)
 
             await chat_with_memory(
                 message=trigger,
@@ -696,23 +540,8 @@ async def _execute_classification(
                 temperature=settings.temperature,
             )
 
-            # Register/extend listening window if Edward sent an iMessage
-            if len(_recent_edward_sends) > sends_before and event.chat_identifier:
-                _active_listeners[event.chat_identifier] = ListeningWindow(
-                    conversation_id=conversation_id,
-                    chat_identifier=event.chat_identifier,
-                    expires_at=datetime.now(timezone.utc) + LISTENING_WINDOW_DURATION,
-                    system_prompt=settings.system_prompt,
-                    model=settings.model,
-                    temperature=settings.temperature,
-                )
-                print(
-                    f"[Heartbeat] Listening window registered for "
-                    f"{event.chat_identifier} (conv {conversation_id[:8]}...)"
-                )
-            # For WhatsApp: always register listening window after acting on a mention
-            # (bridge sends are not tracked via _recent_edward_sends — that's iMessage only)
-            elif event.source == "whatsapp" and event.chat_identifier:
+            # Register listening window after acting on a WhatsApp mention
+            if event.source == "whatsapp" and event.chat_identifier:
                 _active_listeners[event.chat_identifier] = ListeningWindow(
                     conversation_id=conversation_id,
                     chat_identifier=event.chat_identifier,
@@ -819,30 +648,8 @@ async def run_triage_cycle(cycle_number: int) -> None:
 
         for event in mentions:
             is_follow_up = event.triage_status == "follow_up"
-            is_calendar_urgent = event.triage_status == "calendar_urgent"
 
-            if is_calendar_urgent:
-                # Calendar urgent: send push notification, no chat_with_memory
-                classification = {
-                    "event_id": event.id,
-                    "classification": "ESCALATE",
-                    "reasoning": "Calendar event starting soon",
-                    "action_description": event.summary or "Upcoming event",
-                }
-                try:
-                    from services.push_service import send_push_notification
-
-                    await send_push_notification(
-                        title="Upcoming event",
-                        body=(event.summary or "")[:100],
-                        tag="heartbeat-calendar",
-                    )
-                except Exception as e:
-                    print(f"[Heartbeat] Calendar push notification failed: {e}")
-                event.triage_status = "escalated"
-                escalated_count += 1
-                print(f"[Heartbeat] Calendar urgent: {event.summary} → ESCALATE")
-            elif is_follow_up:
+            if is_follow_up:
                 classification = {
                     "event_id": event.id,
                     "classification": "ACT",
@@ -862,8 +669,7 @@ async def run_triage_cycle(cycle_number: int) -> None:
                 }
                 await _execute_classification(event, classification)
                 acted_count += 1
-                label = "@edward mention" if event.source != "email" else "email @edward mention"
-                print(f"[Heartbeat] {label} from {event.contact_name or event.sender} → ACT")
+                print(f"[Heartbeat] @edward mention from {event.contact_name or event.sender} → ACT")
 
         if surviving:
             layer_reached = 2

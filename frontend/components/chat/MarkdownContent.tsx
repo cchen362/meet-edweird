@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Download } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { useState, useCallback } from "react";
 
 interface MarkdownContentProps {
@@ -82,21 +82,6 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
           return <>{children}</>;
         },
         a({ href, children }) {
-          const fileDownloadMatch = href?.match(/(?:https?:\/\/[^/]+)?\/api\/files\/([^/]+)\/download$/);
-          if (fileDownloadMatch) {
-            // Normalize to relative path so it works regardless of domain
-            const downloadHref = `/api/files/${fileDownloadMatch[1]}/download`;
-            return (
-              <a
-                href={downloadHref}
-                download
-                className="inline-flex items-center gap-1.5 bg-terminal/10 border border-terminal/30 rounded-lg px-2.5 py-1 text-sm text-terminal hover:bg-terminal/20 hover:border-terminal/50 transition-colors no-underline cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate max-w-[200px]">{children}</span>
-              </a>
-            );
-          }
           return (
             <a
               href={href}

@@ -10,21 +10,6 @@ from typing import Optional
 
 from sqlalchemy import select, func, update
 from services.database import async_session, HeartbeatEventModel, HeartbeatConfigModel, TriageResultModel
-from services.heartbeat.listener_imessage import (
-    start_imessage_listener,
-    stop_imessage_listener,
-    get_listener_status,
-)
-from services.heartbeat.listener_calendar import (
-    start_calendar_listener,
-    stop_calendar_listener,
-    get_calendar_listener_status,
-)
-from services.heartbeat.listener_email import (
-    start_email_listener,
-    stop_email_listener,
-    get_email_listener_status,
-)
 from services.heartbeat.listener_whatsapp import (
     start_whatsapp_listener,
     stop_whatsapp_listener,
@@ -100,11 +85,7 @@ async def get_pending_briefing() -> Optional[str]:
             summary = (event.summary or "")[:100]
             status_label = event.triage_status.upper()
 
-            if event.source == "calendar":
-                lines.append(f"- [CALENDAR] {summary} ({time_ago})")
-            elif event.source == "email":
-                lines.append(f"- [EMAIL] {sender}: {summary} ({time_ago})")
-            elif event.source == "whatsapp":
+            if event.source == "whatsapp":
                 lines.append(f"- [WHATSAPP] {sender} messaged: {summary} ({time_ago})")
             else:
                 lines.append(f"- [{status_label}] {sender} texted: {summary} ({time_ago})")
@@ -180,25 +161,8 @@ async def get_heartbeat_status() -> dict:
         "pending_count": pending_count,
         "last_triage_at": _last_triage_at.strftime("%Y-%m-%dT%H:%M:%SZ") if _last_triage_at else None,
         "next_triage_at": next_triage_at,
-        "listener_status": get_listener_status(),
         "allowed_senders": allowed_senders,
         "tracks": {
-            "imessage": {
-                "enabled": config.imessage_enabled,
-                "status": get_listener_status(),
-                "poll_seconds": config.imessage_poll_seconds,
-            },
-            "calendar": {
-                "enabled": config.calendar_enabled,
-                "status": get_calendar_listener_status(),
-                "poll_seconds": config.calendar_poll_seconds,
-                "lookahead_minutes": config.calendar_lookahead_minutes,
-            },
-            "email": {
-                "enabled": config.email_enabled,
-                "status": get_email_listener_status(),
-                "poll_seconds": config.email_poll_seconds,
-            },
             "whatsapp": {
                 "enabled": config.whatsapp_enabled,
                 "status": get_whatsapp_listener_status(),
@@ -206,13 +170,6 @@ async def get_heartbeat_status() -> dict:
             },
         },
         # Per-track config fields for frontend
-        "imessage_enabled": config.imessage_enabled,
-        "imessage_poll_seconds": config.imessage_poll_seconds,
-        "calendar_enabled": config.calendar_enabled,
-        "calendar_poll_seconds": config.calendar_poll_seconds,
-        "calendar_lookahead_minutes": config.calendar_lookahead_minutes,
-        "email_enabled": config.email_enabled,
-        "email_poll_seconds": config.email_poll_seconds,
         "whatsapp_enabled": config.whatsapp_enabled,
         "whatsapp_poll_seconds": config.whatsapp_poll_seconds,
     }
@@ -285,18 +242,9 @@ async def start_heartbeat() -> None:
 
     config = await _load_config()
 
-    print(f"[Heartbeat] Config: imessage={config.imessage_enabled}, calendar={config.calendar_enabled}, email={config.email_enabled}, whatsapp={config.whatsapp_enabled}")
+    print(f"[Heartbeat] Config: whatsapp={config.whatsapp_enabled}")
 
     # Start each listener based on per-track config
-    if config.imessage_enabled:
-        await start_imessage_listener()
-
-    if config.calendar_enabled:
-        await start_calendar_listener(config)
-
-    if config.email_enabled:
-        await start_email_listener(config)
-
     if config.whatsapp_enabled:
         await start_whatsapp_listener(config)
 
@@ -319,8 +267,5 @@ async def stop_heartbeat() -> None:
         _heartbeat_task = None
 
     # Stop all listeners
-    await stop_imessage_listener()
-    await stop_calendar_listener()
-    await stop_email_listener()
     await stop_whatsapp_listener()
     print("[Heartbeat] System stopped")

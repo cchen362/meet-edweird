@@ -27,8 +27,7 @@ def _wait_for_postgres_from_url(url: str, timeout_s: int = 300, interval_s: int 
     """Block until PostgreSQL is reachable on its TCP port, or exit after timeout.
 
     Extracts host/port from DATABASE_URL. Falls back to localhost:5432 if the
-    URL has no explicit host (e.g. Unix socket URLs on macOS — but this function
-    is only called on Windows where Docker always uses TCP).
+    URL has no explicit host (Docker on Windows always uses TCP).
     """
     parsed = urllib.parse.urlparse(url)
     host = parsed.hostname or "localhost"
@@ -65,16 +64,13 @@ if __name__ == "__main__":
     )
     server = uvicorn.Server(config)
 
-    if sys.platform == "win32":
-        _wait_for_postgres_from_url(os.environ["DATABASE_URL"])  # block until DB ready before starting
-        # Create SelectorEventLoop explicitly and run the server on it.
-        # uvicorn.run() and asyncio.run() both create ProactorEventLoop
-        # on Windows which psycopg cannot use.
-        loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(server.serve())
-        finally:
-            loop.close()
-    else:
-        server.run()
+    _wait_for_postgres_from_url(os.environ["DATABASE_URL"])  # block until DB ready before starting
+    # Create SelectorEventLoop explicitly and run the server on it.
+    # uvicorn.run() and asyncio.run() both create ProactorEventLoop
+    # on Windows which psycopg cannot use.
+    loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(server.serve())
+    finally:
+        loop.close()

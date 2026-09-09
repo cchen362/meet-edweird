@@ -9,8 +9,6 @@ import {
   Brain,
   FileText,
   Calendar,
-  Database,
-  FolderOpen,
   ArrowLeft,
   Dna,
   GitBranch,
@@ -23,8 +21,6 @@ import { SkillsPanel } from "@/components/settings/SkillsPanel";
 import { CustomMCPPanel } from "@/components/settings/CustomMCPPanel";
 import { EventsBrowser } from "@/components/settings/EventsBrowser";
 import { HeartbeatPanel } from "@/components/settings/HeartbeatPanel";
-import { DatabaseBrowser } from "@/components/settings/DatabaseBrowser";
-import { FileBrowser } from "@/components/settings/FileBrowser";
 import { EvolutionPanel } from "@/components/settings/EvolutionPanel";
 import { OrchestratorPanel } from "@/components/settings/OrchestratorPanel";
 
@@ -39,12 +35,10 @@ const TILES: TileConfig[] = [
   { id: "general", title: "General", description: "Model, temperature, and providers", icon: Settings2 },
   { id: "skills", title: "Skills", description: "Enable and disable integrations", icon: Zap },
   { id: "mcp", title: "Edward's Servers", description: "Manage custom MCP servers", icon: Puzzle },
-  { id: "heartbeat", title: "Heartbeat", description: "Monitor iMessage listener", icon: HeartPulse },
+  { id: "heartbeat", title: "Heartbeat", description: "Monitor the WhatsApp listener and triage", icon: HeartPulse },
   { id: "memories", title: "Memories", description: "Search long-term memory", icon: Brain },
   { id: "documents", title: "Documents", description: "Store and search documents", icon: FileText },
   { id: "events", title: "Events", description: "Scheduled reminders and tasks", icon: Calendar },
-  { id: "databases", title: "Databases", description: "Inspect conversation databases", icon: Database },
-  { id: "files", title: "Files", description: "Browse stored files", icon: FolderOpen },
   { id: "evolution", title: "Evolution", description: "Self-coding and auto-deployment", icon: Dna },
   { id: "orchestrator", title: "Orchestrator", description: "Manage parallel worker agents", icon: GitBranch },
 ];
@@ -58,8 +52,6 @@ function renderPanel(id: string) {
     case "memories": return <MemoryBrowser isExpanded hideHeader />;
     case "documents": return <DocumentBrowser isExpanded hideHeader />;
     case "events": return <EventsBrowser isExpanded hideHeader />;
-    case "databases": return <DatabaseBrowser isExpanded hideHeader />;
-    case "files": return <FileBrowser isExpanded hideHeader />;
     case "evolution": return <EvolutionPanel isExpanded hideHeader />;
     case "orchestrator": return <OrchestratorPanel isExpanded hideHeader />;
     default: return null;

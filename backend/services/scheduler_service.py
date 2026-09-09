@@ -79,17 +79,17 @@ def _build_scheduler_system_prompt(base_system_prompt: str, event) -> str:
     # Channel-specific delivery rules
     channel = (event.delivery_channel or "").strip().lower()
 
-    if channel == "sms":
+    if channel == "whatsapp":
         delivery_rules = (
-            "- You MUST deliver via SMS using send_message(channel=\"sms\") or send_sms().\n"
+            "- You MUST deliver via the WhatsApp bridge tools.\n"
             "- Do NOT just respond in chat — the user is not watching.\n"
-            "- If SMS fails, report the failure but do not silently swallow it."
+            "- If WhatsApp delivery fails, report the failure but do not silently swallow it."
         )
-    elif channel == "imessage":
+    elif channel == "push":
         delivery_rules = (
-            "- You MUST deliver via iMessage using send_imessage() or send_message(channel=\"imessage\").\n"
+            "- You MUST deliver via send_push_notification().\n"
             "- Do NOT just respond in chat — the user is not watching.\n"
-            "- If iMessage fails, report the failure but do not silently swallow it."
+            "- If the push notification fails, report the failure but do not silently swallow it."
         )
     elif channel == "chat":
         delivery_rules = (

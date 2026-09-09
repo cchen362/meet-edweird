@@ -79,7 +79,6 @@ export interface ProgressStep {
 
 export interface MessageAttachment {
   id: string;
-  file_id?: string;
   filename: string;
   mime_type: string;
   size: number;
@@ -367,7 +366,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (msg.attachments && msg.attachments.length > 0) {
           message.attachments = msg.attachments.map((att, i) => ({
             id: `${id}-${index}-att-${i}`,
-            file_id: att.file_id,
             filename: att.filename,
             mime_type: att.mime_type,
             size: att.size || 0,

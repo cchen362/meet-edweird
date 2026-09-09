@@ -7,7 +7,6 @@ available to Edward immediately.
 """
 
 import os
-import sys
 import json
 import uuid
 import asyncio
@@ -19,15 +18,6 @@ from datetime import datetime
 
 from services.database import async_session, CustomMCPServerModel
 from sqlalchemy import select
-
-
-def _needs_proactor_thread() -> bool:
-    """
-    On Windows with SelectorEventLoop, asyncio cannot create subprocess pipes.
-    anyio (used by the MCP SDK) raises NotImplementedError in this case.
-    Detect this so we can launch MCP subprocesses in a dedicated ProactorEventLoop thread.
-    """
-    return sys.platform == "win32"
 
 
 class _ProactorMCPThread:
@@ -205,66 +195,33 @@ async def _start_server_process(server: CustomMCPServerModel) -> ServerInstance:
             env=full_env,
         )
 
-        if _needs_proactor_thread():
-            # On Windows, SelectorEventLoop cannot create subprocess pipes.
-            # Run the MCP subprocess on a dedicated ProactorEventLoop thread.
-            mcp_thread = _ProactorMCPThread()
-            mcp_thread.start()
-            try:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, lambda: mcp_thread.run(mcp_thread.connect(server_params)))
-                tools_result = await loop.run_in_executor(None, lambda: mcp_thread.run(mcp_thread.list_tools()))
-            except Exception:
-                mcp_thread.stop()
-                raise
+        # Windows: SelectorEventLoop (forced for psycopg compatibility) cannot
+        # create subprocess pipes, so run the MCP subprocess on a dedicated
+        # ProactorEventLoop thread.
+        mcp_thread = _ProactorMCPThread()
+        mcp_thread.start()
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: mcp_thread.run(mcp_thread.connect(server_params)))
+            tools_result = await loop.run_in_executor(None, lambda: mcp_thread.run(mcp_thread.list_tools()))
+        except Exception:
+            mcp_thread.stop()
+            raise
 
-            wrapped_tools = []
-            prefix = server.tool_prefix
-            for t in tools_result.tools:
-                original_name = t.name
-                tool_name = original_name if original_name.startswith(f"{prefix}_") else f"{prefix}_{original_name}"
-                wrapped_tools.append(_ProactorMCPToolWrapper(
-                    mcp_thread=mcp_thread,
-                    name=tool_name,
-                    original_name=original_name,
-                    description=t.description or "",
-                    input_schema=t.inputSchema if hasattr(t, 'inputSchema') else {},
-                ))
+        wrapped_tools = []
+        prefix = server.tool_prefix
+        for t in tools_result.tools:
+            original_name = t.name
+            tool_name = original_name if original_name.startswith(f"{prefix}_") else f"{prefix}_{original_name}"
+            wrapped_tools.append(_ProactorMCPToolWrapper(
+                mcp_thread=mcp_thread,
+                name=tool_name,
+                original_name=original_name,
+                description=t.description or "",
+                input_schema=t.inputSchema if hasattr(t, 'inputSchema') else {},
+            ))
 
-            instance.client = {"mcp_thread": mcp_thread}
-        else:
-            # macOS/Linux: SelectorEventLoop supports subprocesses fine.
-            from mcp import ClientSession
-            from mcp.client.stdio import stdio_client
-
-            stdio_ctx = stdio_client(server_params)
-            read_stream, write_stream = await stdio_ctx.__aenter__()
-            try:
-                session_ctx = ClientSession(read_stream, write_stream)
-                mcp_session = await session_ctx.__aenter__()
-                await mcp_session.initialize()
-
-                tools_result = await mcp_session.list_tools()
-                wrapped_tools = []
-                prefix = server.tool_prefix
-                for t in tools_result.tools:
-                    original_name = t.name
-                    tool_name = original_name if original_name.startswith(f"{prefix}_") else f"{prefix}_{original_name}"
-                    wrapped_tools.append(MCPToolWrapper(
-                        session=mcp_session,
-                        name=tool_name,
-                        original_name=original_name,
-                        description=t.description or "",
-                        input_schema=t.inputSchema if hasattr(t, 'inputSchema') else {},
-                    ))
-            except Exception:
-                try:
-                    await stdio_ctx.__aexit__(None, None, None)
-                except Exception:
-                    pass
-                raise
-
-            instance.client = {"stdio_ctx": stdio_ctx, "session_ctx": session_ctx, "session": mcp_session}
+        instance.client = {"mcp_thread": mcp_thread}
 
         instance.tools = wrapped_tools
         instance.status = "connected"

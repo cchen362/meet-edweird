@@ -81,7 +81,7 @@ The pre-cleanup system is catalogued in `docs/specs/ARCHITECTURE_LEGACY_2026-03.
 
 **The chat turn lives in `backend/services/graph/streaming.py`.** Despite the package name, there is no LangGraph; Plan 009 replaced it with a direct SDK loop. One turn = retrieve memories → build system prompt (`EDWARD_CHARACTER` + platform + memory + heartbeat briefing + time) → LLM call → execute tool calls (max iterations, circuit breaker on consecutive failures) → stream content → save to the checkpoint store → fire-and-forget post-turn work (memory extraction, search tags, reflection). SSE events are the contract with the frontend; the event names are listed in `EventType` in that file.
 
-**Conversation state** is the `conversation_messages` table via `backend/services/checkpoint_store.py` (plain dict messages, provider-neutral). Legacy LangGraph `checkpoints` are read-only fallback and are deleted in Plan 001.
+**Conversation state** is the `conversation_messages` table via `backend/services/checkpoint_store.py` (plain dict messages, provider-neutral). The legacy LangGraph `checkpoints` read-only fallback code was removed in Plan 001 M2; the `checkpoints` table itself is dropped in Plan 001 M5, after a `pg_dump`.
 
 **Tools** are Python functions in `backend/services/graph/tools.py` decorated for schema generation, bound per request by `backend/services/tool_registry.py` according to skill enabled-state in the `skills` table (5-second cache; call `refresh_registry()` after toggling). Memory, document, scheduled-event, and push tools are always bound; the rest are skill-gated.
 
@@ -91,7 +91,7 @@ The pre-cleanup system is catalogued in `docs/specs/ARCHITECTURE_LEGACY_2026-03.
 
 **Reach.** The frontend is a Next.js PWA on port 3001, proxied to the backend on 8000, exposed to the owner's phone through a permanent ngrok domain started by `autostart.ps1` at login and kept alive by `watchdog.ps1`. Web Push uses VAPID (`backend/services/push_service.py`). Push delivery is currently broken for unknown reasons (Plan 002).
 
-**Platform** (`D-001-1`): Windows only. PowerShell scripts (`setup.ps1`, `restart.ps1`, `backend/start.ps1`) are the supported entry points. The `.sh` equivalents and every Apple-specific integration are deleted in Plan 001 M2.
+**Platform** (`D-001-1`): Windows only. PowerShell scripts (`setup.ps1`, `restart.ps1`, `backend/start.ps1`) are the supported entry points. The `.sh` equivalents and every Apple-specific integration were deleted in Plan 001 M2.
 
 ---
 

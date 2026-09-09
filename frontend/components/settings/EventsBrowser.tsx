@@ -33,9 +33,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const CHANNEL_COLORS: Record<string, string> = {
   chat: "bg-purple-500/20 text-purple-400",
-  sms: "bg-cyan-500/20 text-cyan-400",
   whatsapp: "bg-green-500/20 text-green-400",
-  imessage: "bg-blue-500/20 text-blue-400",
+  push: "bg-blue-500/20 text-blue-400",
 };
 
 interface EventsBrowserProps {

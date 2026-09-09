@@ -2,14 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Calendar,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   HeartPulse,
   Loader2,
-  Mail,
-  MessageCircle,
   Phone,
   RefreshCw,
   Settings2,
@@ -66,13 +63,6 @@ const POLL_OPTIONS = [
   { label: "1m", value: 60 },
   { label: "5m", value: 300 },
   { label: "15m", value: 900 },
-];
-
-const LOOKAHEAD_OPTIONS = [
-  { label: "15m", value: 15 },
-  { label: "30m", value: 30 },
-  { label: "60m", value: 60 },
-  { label: "2h", value: 120 },
 ];
 
 function timeAgo(dateStr: string | null): string {
@@ -141,7 +131,7 @@ function EventDetail({ event }: { event: HeartbeatEvent }) {
   const renderContent = () => {
     if (!raw) return null;
 
-    if (event.source === "imessage" || event.source === "sms" || event.source === "whatsapp") {
+    if (event.source === "whatsapp") {
       const text = raw.text as string | undefined;
       if (text) {
         return (
@@ -153,63 +143,6 @@ function EventDetail({ event }: { event: HeartbeatEvent }) {
           </div>
         );
       }
-    }
-
-    if (event.source === "email") {
-      const subject = raw.subject as string | undefined;
-      const body = raw.body as string | undefined;
-      return (
-        <div className="space-y-2">
-          {subject && (
-            <div>
-              <span className="text-xs text-text-muted">Subject:</span>{" "}
-              <span className="text-xs text-text-primary">{subject}</span>
-            </div>
-          )}
-          {body && (
-            <div>
-              <span className="text-xs text-text-muted block mb-1">Body</span>
-              <pre className="text-xs text-text-primary bg-primary-bg rounded p-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words border border-input-border">
-                {body}
-              </pre>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (event.source === "calendar") {
-      const start = raw.start_date as string | undefined;
-      const end = raw.end_date as string | undefined;
-      const allDay = raw.all_day as boolean | undefined;
-      const title = raw.title as string | undefined;
-      return (
-        <div className="space-y-1">
-          {title && (
-            <div>
-              <span className="text-xs text-text-muted">Event:</span>{" "}
-              <span className="text-xs text-text-primary">{title}</span>
-            </div>
-          )}
-          {start && (
-            <div>
-              <span className="text-xs text-text-muted">Start:</span>{" "}
-              <span className="text-xs text-text-primary">{formatFullTime(start)}</span>
-            </div>
-          )}
-          {end && (
-            <div>
-              <span className="text-xs text-text-muted">End:</span>{" "}
-              <span className="text-xs text-text-primary">{formatFullTime(end)}</span>
-            </div>
-          )}
-          {allDay && (
-            <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              All day
-            </span>
-          )}
-        </div>
-      );
     }
 
     // Fallback: JSON dump
@@ -291,13 +224,6 @@ export function HeartbeatPanel({ isExpanded: initialExpanded = false, hideHeader
     triage_interval_seconds: 900,
     digest_token_cap: 800,
     allowed_senders: [],
-    imessage_enabled: true,
-    imessage_poll_seconds: 10,
-    calendar_enabled: false,
-    calendar_poll_seconds: 300,
-    calendar_lookahead_minutes: 30,
-    email_enabled: false,
-    email_poll_seconds: 300,
     whatsapp_enabled: false,
     whatsapp_poll_seconds: 30,
   });
@@ -331,13 +257,6 @@ export function HeartbeatPanel({ isExpanded: initialExpanded = false, hideHeader
         triage_interval_seconds: statusData.triage_interval_seconds,
         digest_token_cap: 800, // Not returned from status, keep current
         allowed_senders: statusData.allowed_senders || [],
-        imessage_enabled: statusData.imessage_enabled ?? true,
-        imessage_poll_seconds: statusData.imessage_poll_seconds ?? 10,
-        calendar_enabled: statusData.calendar_enabled ?? false,
-        calendar_poll_seconds: statusData.calendar_poll_seconds ?? 300,
-        calendar_lookahead_minutes: statusData.calendar_lookahead_minutes ?? 30,
-        email_enabled: statusData.email_enabled ?? false,
-        email_poll_seconds: statusData.email_poll_seconds ?? 300,
         whatsapp_enabled: statusData.whatsapp_enabled ?? false,
         whatsapp_poll_seconds: statusData.whatsapp_poll_seconds ?? 30,
       });
@@ -604,9 +523,6 @@ export function HeartbeatPanel({ isExpanded: initialExpanded = false, hideHeader
           <div className="flex gap-1.5">
             {([
               { label: "All", value: undefined },
-              { label: "Messages", value: "imessage" },
-              { label: "Calendar", value: "calendar" },
-              { label: "Email", value: "email" },
               { label: "WhatsApp", value: "whatsapp" },
             ] as { label: string; value: string | undefined }[]).map((opt) => (
               <button
@@ -659,15 +575,7 @@ export function HeartbeatPanel({ isExpanded: initialExpanded = false, hideHeader
                           <span className="text-xs text-text-muted font-mono w-14 shrink-0">
                             {formatTime(event.created_at)}
                           </span>
-                          {event.source === "calendar" ? (
-                            <Calendar className="w-3 h-3 text-text-muted shrink-0" />
-                          ) : event.source === "email" ? (
-                            <Mail className="w-3 h-3 text-text-muted shrink-0" />
-                          ) : event.source === "whatsapp" ? (
-                            <Phone className="w-3 h-3 text-text-muted shrink-0" />
-                          ) : (
-                            <MessageCircle className="w-3 h-3 text-text-muted shrink-0" />
-                          )}
+                          <Phone className="w-3 h-3 text-text-muted shrink-0" />
                           <span className="text-sm text-text-primary truncate max-w-[120px]">
                             {event.contact_name || event.sender || "Unknown"}
                           </span>
@@ -777,246 +685,8 @@ export function HeartbeatPanel({ isExpanded: initialExpanded = false, hideHeader
                 {/* Per-Track Configuration */}
                 <div className="space-y-3">
                   <span className="text-xs font-medium text-text-muted uppercase tracking-wide">
-                    Listener Tracks
+                    Listener
                   </span>
-
-                  {/* iMessage Track */}
-                  <div className="p-3 bg-surface rounded-lg border border-input-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <MessageCircle className="w-3.5 h-3.5 text-text-muted" />
-                        <span className="text-sm text-text-primary">iMessage</span>
-                        <span
-                          className={cn(
-                            "w-2 h-2 rounded-full",
-                            status?.tracks?.imessage?.status === "running"
-                              ? "bg-terminal"
-                              : status?.tracks?.imessage?.status === "error"
-                                ? "bg-red-400"
-                                : "bg-gray-500",
-                          )}
-                        />
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const v = !config.imessage_enabled;
-                          try {
-                            await updateHeartbeatConfig({ imessage_enabled: v });
-                            setConfig((prev) => ({ ...prev, imessage_enabled: v }));
-                          } catch (err) {
-                            console.error("Failed to toggle iMessage:", err);
-                          }
-                        }}
-                        className={cn(
-                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                          config.imessage_enabled ? "bg-terminal" : "bg-gray-600",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
-                            config.imessage_enabled ? "translate-x-5" : "translate-x-1",
-                          )}
-                        />
-                      </button>
-                    </div>
-                    {config.imessage_enabled && (
-                      <div>
-                        <span className="text-xs text-text-muted block mb-1">Poll interval</span>
-                        <div className="flex gap-1">
-                          {POLL_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={async () => {
-                                try {
-                                  await updateHeartbeatConfig({ imessage_poll_seconds: opt.value });
-                                  setConfig((prev) => ({ ...prev, imessage_poll_seconds: opt.value }));
-                                } catch (err) {
-                                  console.error("Failed to update iMessage poll:", err);
-                                }
-                              }}
-                              className={cn(
-                                "px-2 py-1 rounded text-xs font-mono border transition-colors",
-                                config.imessage_poll_seconds === opt.value
-                                  ? "bg-terminal/20 text-terminal border-terminal/30"
-                                  : "bg-primary-bg text-text-muted border-input-border hover:border-text-muted",
-                              )}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Calendar Track */}
-                  <div className="p-3 bg-surface rounded-lg border border-input-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-text-muted" />
-                        <span className="text-sm text-text-primary">Calendar</span>
-                        <span
-                          className={cn(
-                            "w-2 h-2 rounded-full",
-                            status?.tracks?.calendar?.status === "running"
-                              ? "bg-terminal"
-                              : status?.tracks?.calendar?.status === "error"
-                                ? "bg-red-400"
-                                : "bg-gray-500",
-                          )}
-                        />
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const v = !config.calendar_enabled;
-                          try {
-                            await updateHeartbeatConfig({ calendar_enabled: v });
-                            setConfig((prev) => ({ ...prev, calendar_enabled: v }));
-                          } catch (err) {
-                            console.error("Failed to toggle calendar:", err);
-                          }
-                        }}
-                        className={cn(
-                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                          config.calendar_enabled ? "bg-terminal" : "bg-gray-600",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
-                            config.calendar_enabled ? "translate-x-5" : "translate-x-1",
-                          )}
-                        />
-                      </button>
-                    </div>
-                    {config.calendar_enabled && (
-                      <div className="space-y-2">
-                        <div>
-                          <span className="text-xs text-text-muted block mb-1">Poll interval</span>
-                          <div className="flex gap-1">
-                            {POLL_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                onClick={async () => {
-                                  try {
-                                    await updateHeartbeatConfig({ calendar_poll_seconds: opt.value });
-                                    setConfig((prev) => ({ ...prev, calendar_poll_seconds: opt.value }));
-                                  } catch (err) {
-                                    console.error("Failed to update calendar poll:", err);
-                                  }
-                                }}
-                                className={cn(
-                                  "px-2 py-1 rounded text-xs font-mono border transition-colors",
-                                  config.calendar_poll_seconds === opt.value
-                                    ? "bg-terminal/20 text-terminal border-terminal/30"
-                                    : "bg-primary-bg text-text-muted border-input-border hover:border-text-muted",
-                                )}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-xs text-text-muted block mb-1">Lookahead window</span>
-                          <div className="flex gap-1">
-                            {LOOKAHEAD_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                onClick={async () => {
-                                  try {
-                                    await updateHeartbeatConfig({ calendar_lookahead_minutes: opt.value });
-                                    setConfig((prev) => ({ ...prev, calendar_lookahead_minutes: opt.value }));
-                                  } catch (err) {
-                                    console.error("Failed to update lookahead:", err);
-                                  }
-                                }}
-                                className={cn(
-                                  "px-2 py-1 rounded text-xs font-mono border transition-colors",
-                                  config.calendar_lookahead_minutes === opt.value
-                                    ? "bg-terminal/20 text-terminal border-terminal/30"
-                                    : "bg-primary-bg text-text-muted border-input-border hover:border-text-muted",
-                                )}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Email Track */}
-                  <div className="p-3 bg-surface rounded-lg border border-input-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-3.5 h-3.5 text-text-muted" />
-                        <span className="text-sm text-text-primary">Email</span>
-                        <span
-                          className={cn(
-                            "w-2 h-2 rounded-full",
-                            status?.tracks?.email?.status === "running"
-                              ? "bg-terminal"
-                              : status?.tracks?.email?.status === "error"
-                                ? "bg-red-400"
-                                : "bg-gray-500",
-                          )}
-                        />
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const v = !config.email_enabled;
-                          try {
-                            await updateHeartbeatConfig({ email_enabled: v });
-                            setConfig((prev) => ({ ...prev, email_enabled: v }));
-                          } catch (err) {
-                            console.error("Failed to toggle email:", err);
-                          }
-                        }}
-                        className={cn(
-                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                          config.email_enabled ? "bg-terminal" : "bg-gray-600",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
-                            config.email_enabled ? "translate-x-5" : "translate-x-1",
-                          )}
-                        />
-                      </button>
-                    </div>
-                    {config.email_enabled && (
-                      <div>
-                        <span className="text-xs text-text-muted block mb-1">Poll interval</span>
-                        <div className="flex gap-1">
-                          {POLL_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={async () => {
-                                try {
-                                  await updateHeartbeatConfig({ email_poll_seconds: opt.value });
-                                  setConfig((prev) => ({ ...prev, email_poll_seconds: opt.value }));
-                                } catch (err) {
-                                  console.error("Failed to update email poll:", err);
-                                }
-                              }}
-                              className={cn(
-                                "px-2 py-1 rounded text-xs font-mono border transition-colors",
-                                config.email_poll_seconds === opt.value
-                                  ? "bg-terminal/20 text-terminal border-terminal/30"
-                                  : "bg-primary-bg text-text-muted border-input-border hover:border-text-muted",
-                              )}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* WhatsApp Track */}
                   <div className="p-3 bg-surface rounded-lg border border-input-border space-y-2">

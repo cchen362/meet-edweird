@@ -1,8 +1,8 @@
 """
 Skills service for managing Edward's integrations.
 
-Manages messaging skills (iMessage, Twilio SMS) with their connection
-status, enabled state, and hot-reload capability.
+Manages skills (WhatsApp bridge, search, code execution, etc.) with their
+connection status, enabled state, and hot-reload capability.
 """
 
 from typing import List, Optional
@@ -15,21 +15,6 @@ from sqlalchemy import select
 
 # Skill registry with metadata
 SKILL_DEFINITIONS = {
-    "imessage_applescript": {
-        "name": "iMessage (AppleScript)",
-        "description": "Send via osascript (macOS only)",
-        "get_status": lambda: _get_imessage_applescript_status(),
-    },
-    "twilio_sms": {
-        "name": "SMS (Edward's Number)",
-        "description": "Send/receive SMS from Edward's phone",
-        "get_status": lambda: _get_twilio_status(),
-    },
-    "twilio_whatsapp": {
-        "name": "WhatsApp (Edward's Number)",
-        "description": "Send/receive WhatsApp messages from Edward's phone via Twilio",
-        "get_status": lambda: _get_twilio_whatsapp_status(),
-    },
     "whatsapp_mcp": {
         "name": "WhatsApp (Bridge)",
         "description": "Read/send WhatsApp as the user via Baileys bridge with real-time @mention detection",
@@ -60,30 +45,10 @@ SKILL_DEFINITIONS = {
         "description": "Execute shell commands in a sandboxed environment",
         "get_status": lambda: _get_shell_interpreter_status(),
     },
-    "contacts_lookup": {
-        "name": "Contacts Lookup",
-        "description": "Search Contacts.app for names and phone numbers (macOS only)",
-        "get_status": lambda: _get_contacts_lookup_status(),
-    },
     "push_notifications": {
         "name": "Push Notifications",
         "description": "Send push notifications to user's devices (PWA)",
         "get_status": lambda: _get_push_notifications_status(),
-    },
-    "apple_services": {
-        "name": "Apple Services",
-        "description": "Calendar, Reminders, Notes, Mail, Contacts, Maps (macOS only)",
-        "get_status": lambda: _get_apple_services_status(),
-    },
-    "html_hosting": {
-        "name": "HTML Hosting",
-        "description": "Create, update, and delete hosted HTML pages on html.zyroi.com",
-        "get_status": lambda: _get_html_hosting_status(),
-    },
-    "ios_widget": {
-        "name": "iOS Widget",
-        "description": "Control iOS home screen widget via Scriptable app",
-        "get_status": lambda: _get_ios_widget_status(),
     },
     "orchestrator": {
         "name": "Orchestrator",
@@ -100,24 +65,6 @@ SKILL_DEFINITIONS = {
 
 # Track last reload time
 _last_reload: Optional[datetime] = None
-
-
-def _get_imessage_applescript_status() -> dict:
-    """Get status from AppleScript service."""
-    from services.imessage_service import get_status
-    return get_status()
-
-
-def _get_twilio_status() -> dict:
-    """Get status from Twilio service."""
-    from services.twilio_service import get_status
-    return get_status()
-
-
-def _get_twilio_whatsapp_status() -> dict:
-    """Get status from Twilio WhatsApp service."""
-    from services.twilio_service import get_whatsapp_status
-    return get_whatsapp_status()
 
 
 def _get_whatsapp_mcp_status() -> dict:
@@ -156,33 +103,9 @@ def _get_shell_interpreter_status() -> dict:
     return get_status()
 
 
-def _get_contacts_lookup_status() -> dict:
-    """Get status from contacts service."""
-    from services.contacts_service import get_status
-    return get_status()
-
-
 def _get_push_notifications_status() -> dict:
     """Get status from push notification service."""
     from services.push_service import get_status
-    return get_status()
-
-
-def _get_apple_services_status() -> dict:
-    """Get status from Apple Services MCP client."""
-    from services.mcp_client import get_apple_status
-    return get_apple_status()
-
-
-def _get_html_hosting_status() -> dict:
-    """Get status from HTML hosting service."""
-    from services.html_hosting_service import get_status
-    return get_status()
-
-
-def _get_ios_widget_status() -> dict:
-    """Get status from widget service."""
-    from services.widget_service import get_status
     return get_status()
 
 
@@ -317,20 +240,13 @@ async def set_skill_enabled(skill_id: str, enabled: bool) -> Optional[Skill]:
     # Update database
     await _update_skill_db(skill_id, enabled=enabled)
 
-    # Initialize MCP client when enabling MCP skills
+    # Initialize bridge when enabling the WhatsApp skill
     if skill_id == "whatsapp_mcp" and enabled:
         try:
-            from services.mcp_client import initialize_whatsapp_mcp
-            await initialize_whatsapp_mcp()
+            from services.whatsapp_bridge_client import initialize_bridge
+            await initialize_bridge()
         except Exception as e:
-            print(f"Failed to initialize WhatsApp MCP client: {e}")
-
-    if skill_id == "apple_services" and enabled:
-        try:
-            from services.mcp_client import initialize_apple_mcp
-            await initialize_apple_mcp()
-        except Exception as e:
-            print(f"Failed to initialize Apple Services MCP client: {e}")
+            print(f"Failed to initialize WhatsApp bridge: {e}")
 
     if skill_id == "notebooklm" and enabled:
         try:
@@ -362,20 +278,13 @@ async def reload_skills() -> List[Skill]:
     """
     global _last_reload
 
-    # Reload MCP clients if needed
+    # Reload the WhatsApp bridge if needed
     try:
-        from services.mcp_client import shutdown_whatsapp_mcp, initialize_whatsapp_mcp
-        await shutdown_whatsapp_mcp()
-        await initialize_whatsapp_mcp()
+        from services.whatsapp_bridge_client import shutdown_bridge, initialize_bridge
+        await shutdown_bridge()
+        await initialize_bridge()
     except Exception as e:
-        print(f"Failed to reload WhatsApp MCP client: {e}")
-
-    try:
-        from services.mcp_client import shutdown_apple_mcp, initialize_apple_mcp
-        await shutdown_apple_mcp()
-        await initialize_apple_mcp()
-    except Exception as e:
-        print(f"Failed to reload Apple Services MCP client: {e}")
+        print(f"Failed to reload WhatsApp bridge: {e}")
 
     try:
         from services.notebooklm_service import shutdown_notebooklm, initialize_notebooklm

@@ -12,13 +12,9 @@ PUBLIC_ROUTES = {
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",
-    "/api/webhook/twilio",
-    "/api/webhook/twilio/whatsapp",
     "/api/webhook/whatsapp",
     "/api/push/vapid-key",
     "/api/push/status",
-    "/api/widget",
-    "/api/widget/chat",
 }
 
 # Route prefixes that are always public

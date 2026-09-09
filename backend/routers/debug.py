@@ -2,7 +2,6 @@
 Debug router for Edward development and observability.
 
 Provides endpoints for:
-- Graph structure visualization
 - Memory statistics and listing
 - Session state inspection
 """
@@ -10,21 +9,9 @@ Provides endpoints for:
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 
-from services.graph import get_graph_structure
 from services.memory_service import get_memory_stats, get_all_memories
-from services.langsmith_service import is_configured as langsmith_configured, get_traces_for_conversation, get_latest_trace, get_trace_detail
 
 router = APIRouter()
-
-
-@router.get("/debug/graph")
-async def get_graph():
-    """
-    Get the LangGraph structure for visualization.
-
-    Returns nodes and edges describing the agent's processing flow.
-    """
-    return get_graph_structure()
 
 
 @router.get("/debug/memories")
@@ -128,40 +115,3 @@ async def debug_health():
         status["memory_service"] = f"error: {str(e)}"
 
     return status
-
-
-# --- LangSmith trace endpoints ---
-
-@router.get("/debug/langsmith/status")
-async def langsmith_status():
-    """Check if LangSmith tracing is configured."""
-    return {"configured": langsmith_configured()}
-
-
-@router.get("/debug/traces/{conversation_id}")
-async def list_traces(conversation_id: str, limit: int = 10):
-    """List root traces for a conversation."""
-    if not langsmith_configured():
-        raise HTTPException(status_code=503, detail="LangSmith is not configured")
-    traces = get_traces_for_conversation(conversation_id, limit=limit)
-    return {"traces": traces}
-
-
-@router.get("/debug/traces/{conversation_id}/latest")
-async def latest_trace(conversation_id: str):
-    """Get the latest trace with all child runs for a conversation."""
-    if not langsmith_configured():
-        raise HTTPException(status_code=503, detail="LangSmith is not configured")
-    result = get_latest_trace(conversation_id)
-    if not result:
-        return {"root": None, "runs": []}
-    return result
-
-
-@router.get("/debug/trace/{trace_id}")
-async def trace_detail(trace_id: str):
-    """Get all runs within a specific trace."""
-    if not langsmith_configured():
-        raise HTTPException(status_code=503, detail="LangSmith is not configured")
-    runs = get_trace_detail(trace_id)
-    return {"runs": runs}

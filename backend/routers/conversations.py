@@ -1,6 +1,5 @@
 """Router for conversation management endpoints."""
 
-import asyncio
 import logging
 from fastapi import APIRouter, HTTPException
 from typing import Optional, List
@@ -17,7 +16,6 @@ from services.conversation_service import (
     search_conversations,
 )
 from services.checkpoint_store import get_messages
-from services.graph import get_legacy_graph
 
 router = APIRouter()
 
@@ -135,27 +133,6 @@ async def get_conversation_with_messages(conversation_id: str):
     messages = []
     try:
         raw_messages = await get_messages(conversation_id)
-
-        # If empty, try legacy LangGraph checkpoint for old conversations
-        if not raw_messages:
-            legacy_graph = await get_legacy_graph()
-            if legacy_graph:
-                try:
-                    config = {"configurable": {"thread_id": conversation_id}}
-                    state = await asyncio.wait_for(legacy_graph.aget_state(config), timeout=10.0)
-                    if state and state.values and "messages" in state.values:
-                        for msg in state.values["messages"]:
-                            role = "user"
-                            if hasattr(msg, 'type'):
-                                if msg.type in ('system', 'tool'):
-                                    continue
-                                if msg.type == "ai":
-                                    role = "assistant"
-                            raw_messages.append({"role": role, "content": msg.content if hasattr(msg, 'content') else str(msg)})
-                except asyncio.TimeoutError:
-                    logger.warning(f"Legacy aget_state timed out for conversation {conversation_id}")
-                except Exception as e:
-                    logger.warning(f"Legacy graph fallback failed: {e}")
 
         for msg in raw_messages:
             try:
@@ -293,7 +270,7 @@ async def delete_conversation_endpoint(conversation_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Note: LangGraph checkpoints are not deleted here
-    # They will be orphaned but that's acceptable for now
+    # Note: legacy LangGraph checkpoint rows (if any) are not deleted here;
+    # they are orphaned until the table is dropped in Plan 001 M5.
 
     return {"status": "deleted", "id": conversation_id}
