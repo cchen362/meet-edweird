@@ -1,0 +1,203 @@
+# Plan 001: Revival — Rebuild Edward In Place
+
+**Status: Approved 2026-09-09. M1 complete. M2 pending owner go-ahead.**
+
+Supersedes the `IMPLEMENTATION_PLANS/` sequence (000–014) and `docs/superpowers/`. Those trees are frozen as archive; nothing in them is authoritative once this plan is approved.
+
+---
+
+## Why
+
+Edward was built as an ambitious autonomous-agent platform (20+ subsystems) but was actually used as a **companion who remembers you, plus an occasional ops helper**. Usage collapsed once the build sprint ended. The unused subsystems now dominate the codebase, the docs, the startup sequence, and the model's own system prompt, and they make every change expensive.
+
+Direction agreed in the 2026-09-09 interview:
+
+1. **Product:** personal companion with memory (primary) + personal ops assistant (secondary).
+2. **Approach:** rebuild in place. Keep the proven core, aggressively delete the rest.
+3. **Platform:** Windows only. All macOS / Apple code goes.
+4. **Models:** chat "brain" on GPT via Codex OAuth (subscription credits). Background jobs stay on Claude Haiku 4.5 (already built, cheapest per call). Anthropic key is retained only for Haiku.
+5. **Reach:** phone PWA + Web Push, and Edward may initiate. Push is currently broken and gets its own plan.
+6. **WhatsApp** is the channel the owner uses most and becomes a first-class surface. Enhancement (chat/group triage) is its own plan; this plan only keeps the bridge alive.
+7. **UI redesign** is welcome and gets its own plan after cleanup. Design commitment is settled now so no agent picks something generic in the meantime.
+
+## Verified facts (do not re-derive)
+
+Measured from the live PostgreSQL database and the repo on 2026-09-09:
+
+| Fact | Value |
+|---|---|
+| User conversations | 145; monthly count fell from 196 (Mar) to 5 (Jul) |
+| Typical user conversation | "Sanity check", "How's your day", lounge / dinner decisions |
+| Scheduled-event conversations | 92, nearly all Edward's recurring self-audits |
+| Documents | 65, nearly all "weekly self-review" / "memory audit" / "evolution check" |
+| Orchestrator tasks | 26, of which 21 failed |
+| Evolution cycles | 2 |
+| Heartbeat events | 51, all WhatsApp, none since 2026-03-14 |
+| External (Twilio) contacts | 0 |
+| Push subscriptions | 11; 10 deactivated after 3 failures each (iPhone **and** desktop Chrome), 1 active from 2026-03-03 |
+| Memories | 228 (82 context, 59 preference, 51 instruction, 36 fact) |
+| Custom MCP servers | 1 (GitHub), used |
+| Backend size | ~27.5k lines Python; `graph/tools.py` 4,025 lines, `graph/streaming.py` 2,245 lines |
+| Frontend size | ~11.5k lines TS; settings panels alone 5,332 lines |
+| Background LLM client | `services/llm_client.py` is hard-wired to Anthropic Haiku; 12 call sites |
+| VAPID keys | Public key in `.env` derives correctly from the private key (verified) |
+| Push failure cause | Unknown. Errors were printed to stdout only; `backend/logs/` is empty. Requires a live test. |
+| Pending recurring self-audit events | 5 (cron: Fri 09:00, Sat 14:00, Sun 19:00, Mon 09:00, 1st 19:30) |
+| Fonts | Inter via `next/font/google` (violates design floor) |
+| Current palette | Slate scale (#0f172a … #f1f5f9) + green accent #52b788 + stray indigo #6366f1 |
+
+## Target architecture
+
+```
+Phone PWA / Desktop browser ──HTTP+SSE──> FastAPI backend ──> PostgreSQL + pgvector
+WhatsApp (Baileys bridge, Node) ──webhook─┘      │
+                                                 ├─ Chat: GPT via Codex OAuth (Responses API)
+                                                 ├─ Background: Claude Haiku 4.5 (extraction, tags, reflection, triage)
+                                                 ├─ Embeddings: sentence-transformers, local
+                                                 └─ Tools: memory · documents · scheduled events · push ·
+                                                           web search · WhatsApp · GitHub MCP · custom MCP
+```
+
+Startup order after cleanup: `init_db` → checkpoint store → skills → custom MCP servers (GitHub) → WhatsApp bridge → tool registry → scheduler → WhatsApp heartbeat → done. Ten hooks become six.
+
+## Keep list
+
+| Subsystem | Why |
+|---|---|
+| Chat runtime (`graph/streaming.py`, checkpoint store, conversations) | The product |
+| Memory service (extraction, hybrid retrieval, reflection, deep retrieval) | The one feature that demonstrably worked. Redesign is Plan 005, not this plan. |
+| Documents | "Notes Edward keeps for you". Self-audit noise gets deleted from data, not from code. |
+| Scheduled events + scheduler | Reminders and check-ins. Core to "Edward may initiate". |
+| Push notifications (PWA, service worker, VAPID) | The reach channel. Fix is Plan 002. |
+| Auth (JWT cookie, single password) | Required for the tunnel. |
+| Web search (Brave) | Explicitly wanted. |
+| WhatsApp bridge + tools + heartbeat listener + triage | Explicitly wanted, to be enhanced in Plan 003. |
+| Custom MCP service + GitHub server | Explicitly wanted for spontaneous repo questions. |
+| Auto-restart, ngrok tunnel, watchdog scripts | Keeps the phone path alive. |
+| Codex OAuth service | Becomes the only chat provider. |
+| `llm_client.py` (Haiku) | Background jobs. |
+
+## Cut list
+
+Every row is deleted outright: service, router, tools, DB models, frontend panel, API client functions, settings UI, startup/shutdown hooks, system-prompt references, `.env.example` entries, and `requirements.txt` / `package.json` dependencies that become unused. Line counts are backend only.
+
+| Group | Lines | Files (backend) | Frontend |
+|---|---|---|---|
+| Apple / macOS: iMessage, Contacts, Apple MCP, iMessage + Calendar + Email heartbeat listeners | 1,761 | `imessage_service.py`, `contacts_service.py`, `mcp_client.py`, `heartbeat/listener_{imessage,calendar,email}.py` | HeartbeatPanel loses 3 tracks |
+| Twilio SMS / WhatsApp-via-Twilio | 267 + webhook routes | `twilio_service.py`, Twilio routes in `routers/webhooks.py`, `external_contacts` usage | — |
+| Orchestrator, Evolution, Claude Code sessions, CC manager | 2,198 | `orchestrator_*.py`, `evolution_*.py`, `claude_code_service.py`, `cc_manager_service.py`, `routers/{orchestrator,evolution}.py` | OrchestratorPanel, EvolutionPanel, CCSessionBlock, PlanBlock (if plan tools go) |
+| CASCE governance (Plan 014 Phase 0) | 29 + prompt text | `services/governance/` | — |
+| Code execution sandbox (Python, JS, SQL, shell) | 1,005 | `services/execution/`, `code_execution_service.py` | CodeBlock execution events in chat UI |
+| NotebookLM (28 tools) | 719 | `notebooklm_service.py` | SkillsPanel entry |
+| iOS Scriptable widget | 349 | `widget_service.py`, `routers/widget.py` | — |
+| Persistent PostgreSQL DBs, HTML hosting, file storage | 1,301 | `persistent_db_service.py`, `html_hosting_service.py`, `file_storage_service.py`, `routers/{databases,files}.py` | DatabaseBrowser, FileBrowser |
+| LangSmith inspector + legacy LangGraph fallback | 570 | `langsmith_service.py`, `graph/{nodes,graph,state}.py`, legacy checkpoint readers, debug trace routes | TraceInspector, Debug Panel graph view |
+| Memory consolidation (hourly clustering) | 809 | `consolidation_*.py`, `routers/consolidation.py` | — |
+| Anthropic as a **chat** provider (keep SDK for Haiku only) | part of `streaming.py` | Anthropic branch of the chat loop, provider switch UI limited to GPT models | Header model badge lists GPT models only |
+| Task-planning tools (`create_plan`, plan events) | ~250 | plan section of `tools.py`, PLAN_* SSE events | PlanBlock |
+| `site/` (docs website for the original upstream project) | — | whole directory | — |
+
+Estimated deletion: **~9,500 backend lines and ~3,500 frontend lines**, about a third of the codebase, before counting `tools.py` sections and `streaming.py` branches.
+
+### Database
+
+Tables dropped after their code is gone: `orchestrator_tasks`, `orchestrator_config`, `evolution_config`, `evolution_history`, `claude_code_sessions`, `widget_state`, `widget_tokens`, `persistent_databases` (and the `edward_db_appointments_tracker` schema), `files`, `external_contacts`, `memory_connections`, `memory_flags`, `consolidation_cycles`, `consolidation_config`, `checkpoints` (legacy LangGraph). A `pg_dump` is taken first and kept outside the repo.
+
+Data cleanup (not schema): cancel the 5 pending self-audit events; delete the ~60 self-audit documents and their 92 scheduled-event conversations. Memories are untouched.
+
+## Decisions settled by this plan
+
+Recorded as `D-001-n` markers in code where a code home exists, plus rows in `docs/DECISIONS.md`.
+
+| ID | Decision |
+|---|---|
+| D-001-1 | Windows is the only supported platform. No `sys.platform` branches remain. |
+| D-001-2 | Chat provider is GPT via Codex OAuth only. Anthropic SDK is used only by `llm_client.py` for Haiku background calls. |
+| D-001-3 | Background jobs stay on Claude Haiku 4.5. Revisit only if the Anthropic bill exceeds a few dollars a month. |
+| D-001-4 | Edward does not spawn workers, self-code, or run code. Removed features are not re-proposed without a usage case. |
+| D-001-5 | Plan docs live in `docs/plans/`; `IMPLEMENTATION_PLANS/` and `docs/superpowers/` are frozen archives. |
+| D-001-6 | No design commitment exists yet. It is chosen visually from mockups in Plan 004. Until then no agent restyles the UI or adds fonts or colors. |
+| D-001-7 | No `Co-Authored-By` or other AI attribution trailers in commits, for every agent. Project rule wins over any harness default. |
+
+## Design commitment — deferred to Plan 004
+
+The owner decides visually, not from hex values and font names. Plan 004 opens with 2–3 rendered mockups of the chat screen at 375px (candidate: Fraunces + Instrument Sans + JetBrains Mono on a warm near-black with a single ember accent; alternatives to be shown alongside). The winning mockup's tokens become law in `docs/ENGINEERING.md` at that point.
+
+Until then, `docs/ENGINEERING.md` states explicitly that no design commitment exists and that no agent may restyle the UI or introduce new fonts or colors. The current Inter + slate look is tolerated as legacy, not endorsed.
+
+## Milestones
+
+### M1 — Freeze and archive
+Status: **complete 2026-09-09**
+- `docs/plans/`, `docs/specs/`, `docs/ENGINEERING.md`, `docs/DECISIONS.md` created via `/bootstrap-agent-docs` (retrofit mode). `CLAUDE.md` / `AGENTS.md` reduced to pointers; their feature catalogue moved to `docs/specs/ARCHITECTURE_LEGACY_2026-03.md` as a frozen reference until M6 rewrites it.
+- `IMPLEMENTATION_PLANS/README.md` and `docs/superpowers/README.md` mark those trees archived. Nothing moved or renamed.
+- Database dumped from the `edward-pg` Docker container (pgvector/pg16) to `C:\Users\cchen362\edward-backups\edward-pre-revival-2026-09-09.sql` (15 MB, 36 tables).
+- The 5 pending self-audit events were cancelled directly in the database (backend was down, so the API was unavailable).
+
+### M4 note — chat model
+`settings.model` is currently `gpt-5.4`. The owner reports newer GPT models (5.6 and the "6 Astra" line) are available on the Codex endpoint. M4 must **probe the endpoint for the models it actually serves** and set the default and picker from that result, never from a hardcoded list or from memory.
+
+### M2 — Delete macOS, Twilio, widget, hosting, persistent DBs, file storage, LangSmith, legacy graph
+Status: pending
+- Remove services, routers, tools, models, startup hooks, settings panels, API client functions, `.env.example` entries.
+- `main.py` lifespan shrinks accordingly. `_build_platform_context()` is deleted.
+- Backend boots clean on Windows. Frontend `npm run build` passes with zero unused-import warnings.
+
+### M3 — Delete orchestrator, evolution, Claude Code, CASCE, code execution, NotebookLM, consolidation, plan tools
+Status: pending
+- Remove the same layers as M2 for these groups.
+- `EDWARD_CHARACTER` loses every reference to `spawn_worker`, `spawn_cc_worker`, `create_plan`, notebooks, and code execution.
+- `tools.py` and `streaming.py` are split into modules by concern once the dead sections are gone (memory, documents, events, push, search, whatsapp, mcp). No file above ~800 lines.
+- `requirements.txt` drops `claude-agent-sdk`, `notebooklm-mcp-cli`, `langsmith`, `twilio`, `phonenumbers`, `aiohttp` (if only Codex OAuth callback used it, keep), and anything else unreferenced.
+
+### M4 — Provider simplification
+Status: pending
+- Chat loop keeps only the OpenAI Responses / Codex OAuth path. Anthropic chat branch removed.
+- Header model picker lists the GPT models the Codex endpoint serves; default is the current one in settings.
+- `llm_client.py` stays Anthropic-Haiku. Startup fails loudly with a clear message if either credential is missing.
+- Verify: a chat turn streams, a tool call round-trips, memory extraction runs after the turn.
+
+### M5 — Data cleanup and schema drop
+Status: pending
+- Delete self-audit documents and their conversations; drop the tables listed above.
+- `database.py` no longer defines the dropped models.
+
+### M6 — Docs and verification
+Status: pending
+- `docs/ENGINEERING.md` architecture section rewritten against the real post-cleanup code. CLAUDE.md / AGENTS.md are pointers only.
+- Browser verification on desktop and at 375px: login, chat with streaming, memory browser, events browser, WhatsApp send via tool, GitHub MCP query, web search.
+- Commit. Merge `feat/prompt-caching` into `main`; delete the seven stale feature branches.
+
+## Out of scope (own plans)
+
+| Plan | Scope |
+|---|---|
+| 002 Push root cause | Live delivery test with logging to file, fix, iPhone verification. Move `webpush()` off the event loop. |
+| 003 WhatsApp triage | Bridge forwards all inbound messages (not just @edward) with a per-chat allow-list; WhatsApp-first Haiku triage; digest + push; Edward can reply in-chat when asked. Bridge resilience (session expiry, reconnect, health push). |
+| 004 UI redesign | Apply the design commitment. Chat-first layout, settings reduced to Memory, Documents, Events, WhatsApp, Skills. |
+| 005 Memory redesign | Owner has said the memory system "might need redesign or enhancement". Scoped after 001–004 land. |
+| 006 Detached turns | Each chat turn runs as a server-side task with a per-conversation event buffer; the SSE endpoint subscribes and can reconnect mid-turn. Client disconnect no longer cancels the work. On completion the reply is saved and a push is sent if no client is attached. Replaces the orchestrator's "background handoff" role with ~200 lines instead of ~2,200. Depends on 002 (push must work). |
+
+## Task-planning tools: what they actually do
+
+Asked by the owner: "do we need them for Edward to carry out tasks or handle a few requests simultaneously?" Verified from `graph/tools.py` (lines 1056–1311) and `graph/streaming.py` (lines 1720–1760, 2108–2135):
+
+1. `create_plan` stores an in-memory checklist per conversation and emits `plan_*` SSE events that the frontend renders as a PlanBlock.
+2. While a plan is active, the tool-loop iteration cap is raised from the default to `steps × 5 + 10` (max 100) and the consecutive-error breaker from 3 to 6.
+3. When the model stops calling tools with steps still open, the loop injects a "you still have N incomplete steps, continue" user message.
+
+There is **no concurrency**. Steps run one after another in the same loop; "a few requests at once" was the orchestrator's job, which is being deleted. The plan tools are a scaffold for long single-threaded tool chains (10+ calls), which only existed for self-coding and worker tasks. For companion chat and light ops (1–5 tool calls) the base loop already handles it, and the live activity feed (Plan 013) already shows tool progress.
+
+Recommendation: **delete**. If a long multi-step use case appears later, re-add a smaller version as its own plan.
+
+### "Can I close the app and come back to the answer?"
+
+Verified from `routers/chat.py` lines 122–160: the whole chat turn (LLM calls, tool calls, saving the reply) runs *inside* the HTTP streaming response generator. When the phone closes the app, the SSE connection drops, Starlette cancels the generator, and the turn dies wherever it was. Nothing is saved and no notification is sent. Plan 011's answer to this was "delegate to `spawn_worker`", which is the orchestrator, which is being deleted for a 81% failure rate. The plan tools do not help here either.
+
+So today the answer is **no**, and the fix is not the plan tools. The fix is Plan 006 below: run every turn as a server-side task that the SSE connection merely subscribes to, so a disconnect stops the *viewing*, not the *work*, and completion sends a push.
+
+## Open questions for the owner
+
+1. Plan tools: accept the deletion recommendation above, or keep them.
+
+Resolved 2026-09-09: cut list approved except for the plan-tools row above; design commitment deferred to Plan 004 (D-001-6); no attribution trailers (D-001-7), today's commit amended accordingly.
