@@ -1,3 +1,6 @@
+# Salesforce CLI (auto-generated, not relevant to this project)
+.sfdx/
+
 # Dependencies
 node_modules/
 __pycache__/

@@ -1001,7 +1001,9 @@ async def _call_codex(
         "Content-Type": "application/json",
     }
 
-    # Stream SSE and collect the terminal response event which has the full response.
+    # Stream SSE and collect delta events plus the terminal response event.
+    # OpenAI may return an empty output[] in response.completed, so we accumulate
+    # content from delta events as the primary source of truth.
     completed_data = None
     terminal_event_name = None
     # Separate timeouts: 30s connect, 90s between chunks (read), 30s write/pool
@@ -1012,6 +1014,12 @@ async def _call_codex(
     stream_start = time.monotonic()
     event_counts: Dict[str, int] = {}
     last_event_time = stream_start
+
+    # Accumulate streamed content by item_id (in case response.completed has empty output)
+    # item_id -> {"type": "message"|"function_call", "text": str, "args": str, "call_id": str, "name": str}
+    _streamed_items: Dict[str, dict] = {}
+    # Track item order for correct output reconstruction
+    _item_order: list = []
 
     async with httpx.AsyncClient(timeout=stream_timeout) as client:
         async with client.stream("POST", CODEX_API_URL, json=body, headers=headers) as response:
@@ -1034,7 +1042,7 @@ async def _call_codex(
 
             print(f"[CODEX] Stream connected, waiting for response...")
 
-            # Parse SSE stream — look for the terminal response event with the full response.
+            # Parse SSE stream — accumulate deltas AND capture terminal event.
             # SSE format: "event: <type>\ndata: <json>\n\n"
             # Data can span multiple "data:" lines (concatenated with \n per SSE spec)
             buffer = ""
@@ -1063,20 +1071,54 @@ async def _call_codex(
                             event_counts[current_event] = event_counts.get(current_event, 0) + 1
                             last_event_time = time.monotonic()
                             data_str = "\n".join(current_data_lines)
-                            if current_event in {"response.completed", "response.done"} and data_str.strip():
+                            if data_str.strip():
                                 try:
-                                    completed_data = _json.loads(data_str)
+                                    evt_data = _json.loads(data_str)
+                                except _json.JSONDecodeError:
+                                    evt_data = None
+
+                                if current_event in {"response.completed", "response.done"} and evt_data is not None:
+                                    completed_data = evt_data
                                     terminal_event_name = current_event
-                                except _json.JSONDecodeError:
-                                    print(f"[CODEX ERROR] Failed to parse {current_event} JSON: {data_str[:300]}")
-                            elif current_event == "error" and data_str.strip():
-                                try:
-                                    error_data = _json.loads(data_str)
-                                    error_msg = error_data.get("error", {}).get("message", data_str[:200])
-                                except _json.JSONDecodeError:
-                                    error_msg = data_str[:200]
-                                _codex_log_summary(event_counts, time.monotonic() - stream_start, "ERROR")
-                                raise ValueError(f"Codex API stream error: {error_msg}")
+
+                                elif current_event == "error" and evt_data is not None:
+                                    error_msg = evt_data.get("error", {}).get("message", data_str[:200])
+                                    _codex_log_summary(event_counts, time.monotonic() - stream_start, "ERROR")
+                                    raise ValueError(f"Codex API stream error: {error_msg}")
+
+                                elif current_event == "response.output_item.added" and evt_data is not None:
+                                    # Register a new output item: captures type, name, call_id for function calls
+                                    item = evt_data.get("item", {})
+                                    item_id = item.get("id", "")
+                                    if item_id and item_id not in _streamed_items:
+                                        item_type = item.get("type", "")
+                                        _streamed_items[item_id] = {
+                                            "type": item_type,
+                                            "text": "",
+                                            "args": "",
+                                            "call_id": item.get("call_id", ""),
+                                            "name": item.get("name", ""),
+                                        }
+                                        _item_order.append(item_id)
+
+                                elif current_event == "response.output_text.delta" and evt_data is not None:
+                                    item_id = evt_data.get("item_id", "")
+                                    delta = evt_data.get("delta", "")
+                                    if item_id:
+                                        if item_id not in _streamed_items:
+                                            _streamed_items[item_id] = {"type": "message", "text": "", "args": "", "call_id": "", "name": ""}
+                                            _item_order.append(item_id)
+                                        _streamed_items[item_id]["text"] += delta
+
+                                elif current_event == "response.function_call_arguments.delta" and evt_data is not None:
+                                    item_id = evt_data.get("item_id", "")
+                                    delta = evt_data.get("delta", "")
+                                    if item_id:
+                                        if item_id not in _streamed_items:
+                                            _streamed_items[item_id] = {"type": "function_call", "text": "", "args": "", "call_id": "", "name": ""}
+                                            _item_order.append(item_id)
+                                        _streamed_items[item_id]["args"] += delta
+
                         current_event = ""
                         current_data_lines = []
 
@@ -1106,6 +1148,33 @@ async def _call_codex(
                 "Codex API stream ended after partial output or tool-call events without a terminal response event."
             )
         raise ValueError("Codex API stream ended without response.done or response.completed.")
+
+    # If response.completed has an empty output array, reconstruct from accumulated deltas.
+    # This handles the case where OpenAI no longer populates output[] in the terminal event.
+    _resp_obj = completed_data if "output" in completed_data else completed_data.get("response", completed_data)
+    if not _resp_obj.get("output") and _streamed_items:
+        reconstructed_output = []
+        for item_id in _item_order:
+            item_data = _streamed_items[item_id]
+            if item_data["type"] == "function_call":
+                reconstructed_output.append({
+                    "type": "function_call",
+                    "id": item_id,
+                    "call_id": item_data["call_id"],
+                    "name": item_data["name"],
+                    "arguments": item_data["args"],
+                })
+            elif item_data["text"]:
+                reconstructed_output.append({
+                    "type": "message",
+                    "id": item_id,
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": item_data["text"], "annotations": []}],
+                })
+        if reconstructed_output:
+            _resp_obj["output"] = reconstructed_output
+            print(f"[CODEX] Reconstructed output from deltas: {len(reconstructed_output)} items")
 
     _codex_log_summary(event_counts, elapsed, "OK", terminal_event_name=terminal_event_name)
     return _parse_codex_response(completed_data)
@@ -1663,6 +1732,13 @@ async def stream_with_memory_events(
                 plan_iterations = min(100, len(active_plan) * 5 + 10)
                 max_tool_iterations = max(max_tool_iterations, plan_iterations)
 
+            # GPT models can return text alongside tool calls — capture it as the final response
+            if result["text"] and not full_response:
+                full_response = result["text"]
+                assistant_content_emitted = True
+                yield create_event(EventType.CONTENT, conversation_id, content=full_response)
+                needs_streaming = False
+
             # Continue loop to allow more tool calls
             continue
         else:
@@ -2042,6 +2118,10 @@ async def chat_with_memory(
             if active_plan:
                 plan_iterations = min(100, len(active_plan) * 5 + 10)
                 max_tool_iterations = max(max_tool_iterations, plan_iterations)
+
+            # GPT models can return text alongside tool calls — capture it as the final response
+            if result["text"] and not full_response:
+                full_response = result["text"]
 
             # Continue loop to allow more tool calls
             continue
