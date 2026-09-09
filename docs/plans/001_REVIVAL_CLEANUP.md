@@ -1,6 +1,6 @@
 # Plan 001: Revival — Rebuild Edward In Place
 
-**Status: Approved 2026-09-09. M1 complete. M2 code complete 2026-09-09, owner browser pass pending. M3 next.**
+**Status: Approved 2026-09-09. M1, M2 complete. M3 next.**
 
 Supersedes the `IMPLEMENTATION_PLANS/` sequence (000–014) and `docs/superpowers/`. Those trees are frozen as archive; nothing in them is authoritative once this plan is approved.
 
@@ -138,7 +138,7 @@ Status: **complete 2026-09-09**
 `settings.model` is currently `gpt-5.4`. The owner reports newer GPT models (5.6 and the "6 Astra" line) are available on the Codex endpoint. M4 must **probe the endpoint for the models it actually serves** and set the default and picker from that result, never from a hardcoded list or from memory.
 
 ### M2 — Delete macOS, Twilio, widget, hosting, persistent DBs, file storage, LangSmith, legacy graph
-Status: **code complete 2026-09-09** — backend boots clean, `npm run lint` and `npm run build` pass. Owner browser pass (login, Settings → Heartbeat / Skills, a chat turn) still to be done; the agent cannot enter the password.
+Status: **complete 2026-09-09** — backend boots clean, `npm run lint` and `npm run build` pass. Browser-verified after the owner signed in: Settings tiles (Databases/Files gone), Heartbeat panel with a single WhatsApp listener, Skills (9 skills), Events browser, and a full chat turn that streamed a reply, saved to `conversation_messages`, and ran memory extraction; chat and settings checked at 375px. Two pre-existing issues surfaced, neither caused by M2: (1) the Codex endpoint now rejects `gpt-5.4` ("not supported when using Codex with a ChatGPT account"), so every turn silently falls through to the pay-per-token `OPENAI_API_KEY` path — this is the M4 probe item and should be done next; (2) a React hydration mismatch in the header (`ClientLayout.tsx`, the `isAuthenticated && <ModelBadge />` branch) from commit 0e80767, visible only as a dev-overlay error.
 - Deleted in full: iMessage, Contacts, Apple MCP, the iMessage/Calendar/Email heartbeat listeners and their triage rules, Twilio (service, webhooks, auth allow-list), iOS widget, persistent DBs, HTML hosting, file storage, LangSmith debug routes, legacy LangGraph (`graph/{graph,nodes,state}.py`, the boot-time `AsyncPostgresSaver`, the conversations-router fallback), `_build_platform_context()`, all `.sh` scripts, `site/` plus its Cloudflare Pages workflow, and the `opengraph-image` / `twitter-image` routes (social cards for the deleted public site; they also failed to prerender on Windows and were the only thing keeping `npm run build` red).
 - D-001-1 stamped in `backend/main.py`. Every `sys.platform` branch in kept code is now unconditional Windows code; the only remaining branches are in M3-cut files (`claude_code_service.py`, `services/execution/`).
 - Deviations from the design: (1) `nlm_push_file` (NotebookLM, an M3 item) went now because it imported file storage. (2) `delivery_channel` vocabulary for scheduled events changed from `sms`/`imessage` to `whatsapp`/`push`; the live table held only `chat`/null, so no rows were affected. (3) Chat uploads no longer get a `file_id`; the database showed zero uploads ever persisted, so the history-preview path never worked and nothing regressed.
