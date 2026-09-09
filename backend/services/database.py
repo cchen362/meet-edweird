@@ -108,20 +108,6 @@ class DocumentModel(Base):
     )
 
 
-class ExternalContactModel(Base):
-    """External contacts for SMS/messaging conversations."""
-    __tablename__ = "external_contacts"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    phone_number = Column(String, unique=True, nullable=False, index=True)
-    conversation_id = Column(String, nullable=False)  # References conversations table
-    contact_name = Column(String, nullable=True)  # User can set a friendly name
-    platform = Column(String, default="sms")  # sms, whatsapp, etc.
-    last_channel = Column(String, default="sms")  # sms or whatsapp — tracks which channel to reply on
-    created_at = Column(DateTime, server_default=func.now())
-    last_contacted = Column(DateTime, server_default=func.now())
-
-
 class ScheduledEventModel(Base):
     """Scheduled events for reminders, messages, and self-assigned tasks."""
     __tablename__ = "scheduled_events"
@@ -134,7 +120,7 @@ class ScheduledEventModel(Base):
     recurrence_pattern = Column(String, nullable=True)  # Cron string for recurring events
     status = Column(String, default="pending")  # pending/processing/completed/cancelled/failed
     created_by = Column(String, default="edward")  # "user" or "edward"
-    delivery_channel = Column(String, nullable=True)  # sms/imessage/null for auto
+    delivery_channel = Column(String, nullable=True)  # whatsapp/push/chat, or null for auto
     last_fired_at = Column(DateTime, nullable=True)
     fire_count = Column(Integer, default=0)
     last_result = Column(Text, nullable=True)
@@ -147,62 +133,11 @@ class SkillModel(Base):
     """Skills/integrations configuration and status."""
     __tablename__ = "skills"
 
-    id = Column(String, primary_key=True)  # 'imessage_applescript', 'twilio_sms', etc.
+    id = Column(String, primary_key=True)  # 'whatsapp_mcp', 'brave_search', 'push_notifications'
     enabled = Column(Boolean, default=False)
     last_error = Column(Text, nullable=True)  # Last error message if any
     last_connected_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class FileModel(Base):
-    """Persistent file storage for uploads, generated artifacts, and processed files."""
-    __tablename__ = "files"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    filename = Column(String(255), nullable=False)
-    stored_path = Column(String(512), nullable=False)  # Relative to FILE_STORAGE_ROOT
-    mime_type = Column(String(127), nullable=False)
-    size_bytes = Column(Integer, nullable=False)
-    category = Column(String(50), default="general")  # upload, generated, artifact, processed, general
-    description = Column(Text, nullable=True)
-    tags = Column(String, nullable=True)  # Comma-separated
-    source = Column(String(50), default="user")  # user, edward, sandbox
-    source_conversation_id = Column(String, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    last_accessed = Column(DateTime, server_default=func.now())
-    access_count = Column(Integer, default=0)
-
-    __table_args__ = (
-        Index('ix_files_category', 'category'),
-        Index('ix_files_source', 'source'),
-        Index('ix_files_created_at', 'created_at'),
-    )
-
-
-class WidgetStateModel(Base):
-    """Single-row table storing current widget content for iOS Scriptable widget."""
-    __tablename__ = "widget_state"
-
-    id = Column(String, primary_key=True, default="default")
-    title = Column(String, default="Edward")
-    subtitle = Column(String, nullable=True)
-    theme = Column(Text, nullable=True)  # JSON: {backgroundColor, textColor, secondaryTextColor, accentColor}
-    sections = Column(Text, nullable=True)  # JSON array of section objects
-    script = Column(Text, nullable=True)  # Raw Scriptable JS code (overrides structured data when set)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    updated_by = Column(String, default="system")  # "edward" or "system"
-
-
-class WidgetTokenModel(Base):
-    """API tokens for Scriptable widget access."""
-    __tablename__ = "widget_tokens"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    token = Column(String(64), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, server_default=func.now())
-    last_used_at = Column(DateTime, nullable=True)
-    is_active = Column(Boolean, default=True)
 
 
 class PushSubscriptionModel(Base):
@@ -218,21 +153,6 @@ class PushSubscriptionModel(Base):
     last_used_at = Column(DateTime, server_default=func.now())
     failed_count = Column(Integer, default=0)  # Track failed deliveries
     is_active = Column(Boolean, default=True)  # Soft disable on repeated failures
-
-
-class PersistentDatabaseModel(Base):
-    """Persistent SQL databases that survive across conversations."""
-    __tablename__ = "persistent_databases"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(50), unique=True, nullable=False)  # User-friendly name, e.g., "lana_tracking"
-    schema_name = Column(String(64), unique=True, nullable=False)  # PostgreSQL schema, e.g., "edward_db_lana_tracking"
-    description = Column(Text, nullable=True)  # Optional description of the database purpose
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    last_accessed = Column(DateTime, server_default=func.now())
-    row_count = Column(Integer, default=0)  # Approximate row count across all tables
-    user_id = Column(String, nullable=True)  # Future multi-tenant support
 
 
 class CustomMCPServerModel(Base):
@@ -259,7 +179,7 @@ class HeartbeatEventModel(Base):
     __tablename__ = "heartbeat_events"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    source = Column(String(50), nullable=False)       # "imessage"
+    source = Column(String(50), nullable=False)       # "whatsapp"
     event_type = Column(String(50), nullable=False)    # "message_received", "message_sent"
     sender = Column(String(255), nullable=True)
     contact_name = Column(String(255), nullable=True)
@@ -307,14 +227,7 @@ class HeartbeatConfigModel(Base):
     triage_interval_seconds = Column(Integer, default=900)
     digest_token_cap = Column(Integer, default=800)
     allowed_senders = Column(Text, nullable=True)  # JSON array of {"identifier": "...", "label": "..."}
-    # Per-track configuration
-    imessage_enabled = Column(Boolean, default=True)
-    imessage_poll_seconds = Column(Integer, default=10)
-    calendar_enabled = Column(Boolean, default=False)
-    calendar_poll_seconds = Column(Integer, default=300)
-    calendar_lookahead_minutes = Column(Integer, default=30)
-    email_enabled = Column(Boolean, default=False)
-    email_poll_seconds = Column(Integer, default=300)
+    # Per-track configuration (WhatsApp is the only remaining track; iMessage/calendar/email were removed in Plan 001)
     whatsapp_enabled = Column(Boolean, default=False)
     whatsapp_poll_seconds = Column(Integer, default=30)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -335,147 +248,6 @@ class MemoryEnrichmentModel(Base):
     score = Column(Float, default=0.0)
     consumed = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
-
-
-class MemoryConnectionModel(Base):
-    """Links between related memories discovered by consolidation."""
-    __tablename__ = "memory_connections"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    memory_id_a = Column(String, nullable=False, index=True)
-    memory_id_b = Column(String, nullable=False, index=True)
-    connection_type = Column(String, nullable=False)  # same_person, same_topic, same_event, related
-    strength = Column(Float, default=0.5)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class MemoryFlagModel(Base):
-    """Flags for memory quality issues (contradictions, staleness, etc.)."""
-    __tablename__ = "memory_flags"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    memory_id = Column(String, nullable=False, index=True)
-    flag_type = Column(String, nullable=False)  # contradiction, low_confidence, stale
-    description = Column(Text, nullable=False)
-    related_memory_id = Column(String, nullable=True)
-    resolved = Column(Boolean, default=False)
-    resolved_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class ConsolidationCycleModel(Base):
-    """Metrics for each consolidation cycle run."""
-    __tablename__ = "consolidation_cycles"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    memories_reviewed = Column(Integer, default=0)
-    clusters_found = Column(Integer, default=0)
-    connections_created = Column(Integer, default=0)
-    flags_created = Column(Integer, default=0)
-    contradictions_found = Column(Integer, default=0)
-    merges_performed = Column(Integer, default=0)
-    promotions = Column(Integer, default=0)
-    haiku_calls = Column(Integer, default=0)
-    duration_ms = Column(Integer, default=0)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class ConsolidationConfigModel(Base):
-    """Configuration for the memory consolidation service."""
-    __tablename__ = "consolidation_config"
-
-    id = Column(String, primary_key=True, default="default")
-    enabled = Column(Boolean, default=True)
-    interval_seconds = Column(Integer, default=3600)
-    lookback_hours = Column(Integer, default=2)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class ClaudeCodeSessionModel(Base):
-    """Claude Code session records."""
-    __tablename__ = "claude_code_sessions"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    conversation_id = Column(String, nullable=True, index=True)
-    task = Column(Text, nullable=False)
-    status = Column(String, default="running")  # running, completed, failed, cancelled
-    cwd = Column(String, nullable=True)
-    output_summary = Column(Text, nullable=True)  # JSON
-    error = Column(Text, nullable=True)
-    started_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class EvolutionConfigModel(Base):
-    """Configuration for the self-evolution engine."""
-    __tablename__ = "evolution_config"
-
-    id = Column(String, primary_key=True, default="default")
-    enabled = Column(Boolean, default=False)
-    min_interval_seconds = Column(Integer, default=3600)
-    auto_trigger = Column(Boolean, default=False)
-    require_tests = Column(Boolean, default=True)
-    max_files_per_cycle = Column(Integer, default=20)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class EvolutionHistoryModel(Base):
-    """History of evolution cycles."""
-    __tablename__ = "evolution_history"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    trigger = Column(String, default="manual")  # manual, auto, llm
-    description = Column(Text, nullable=False)
-    branch_name = Column(String, nullable=True)
-    status = Column(String, default="pending")  # pending, branching, coding, validating, testing, reviewing, deploying, completed, failed, rolled_back
-    step = Column(String, nullable=True)  # Current step name
-    files_changed = Column(Text, nullable=True)  # JSON array
-    test_output = Column(Text, nullable=True)
-    review_summary = Column(Text, nullable=True)
-    error = Column(Text, nullable=True)
-    rollback_tag = Column(String, nullable=True)
-    cc_session_id = Column(String, nullable=True)
-    duration_ms = Column(Integer, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class OrchestratorTaskModel(Base):
-    """Tasks spawned by the orchestrator for parallel worker execution."""
-    __tablename__ = "orchestrator_tasks"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    parent_conversation_id = Column(String, nullable=False, index=True)
-    worker_conversation_id = Column(String, nullable=True, index=True)
-    task_description = Column(Text, nullable=False)
-    task_type = Column(String, default="internal_worker")  # internal_worker, cc_session
-    model = Column(String, default="claude-haiku-4-5-20251001")
-    status = Column(String, default="pending")  # pending, running, completed, failed, cancelled
-    context_mode = Column(String, default="scoped")  # full, scoped, none
-    context_data = Column(Text, nullable=True)  # JSON context for scoped mode
-    result_summary = Column(Text, nullable=True)
-    error = Column(Text, nullable=True)
-    timeout_seconds = Column(Integer, default=300)
-    cc_session_id = Column(String, nullable=True)  # Claude Code session ID if task_type=cc_session
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class OrchestratorConfigModel(Base):
-    """Configuration for the orchestrator system."""
-    __tablename__ = "orchestrator_config"
-
-    id = Column(String, primary_key=True, default="default")
-    enabled = Column(Boolean, default=False)
-    max_concurrent_workers = Column(Integer, default=5)
-    max_concurrent_cc_sessions = Column(Integer, default=2)
-    default_worker_model = Column(String, default="claude-haiku-4-5-20251001")
-    default_worker_timeout = Column(Integer, default=300)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ConversationMessagesModel(Base):
@@ -508,6 +280,25 @@ async def init_db():
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         # Create tables
         await conn.run_sync(Base.metadata.create_all)
+
+        # Plan 001 M5 (2026-09-09): tables and columns whose features were deleted in M2/M3.
+        # Idempotent so a restart on any database state converges. A pg_dump was taken first.
+        # The f-strings below interpolate a hardcoded tuple of identifiers, never user input,
+        # so the bound-parameter rule does not apply here.
+        for table in (
+            "orchestrator_tasks", "orchestrator_config", "evolution_config", "evolution_history",
+            "claude_code_sessions", "widget_state", "widget_tokens", "persistent_databases",
+            "files", "external_contacts", "memory_connections", "memory_flags",
+            "consolidation_cycles", "consolidation_config",
+            "checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations",
+        ):
+            await conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+        await conn.execute(text("DROP SCHEMA IF EXISTS edward_db_appointments_tracker CASCADE"))
+        for column in (
+            "imessage_enabled", "imessage_poll_seconds", "calendar_enabled", "calendar_poll_seconds",
+            "calendar_lookahead_minutes", "email_enabled", "email_poll_seconds",
+        ):
+            await conn.execute(text(f"ALTER TABLE heartbeat_config DROP COLUMN IF EXISTS {column}"))
 
         # Migration: Add new columns to memories table if they don't exist
         await conn.execute(text("""
@@ -560,16 +351,6 @@ async def init_db():
             UPDATE conversations SET search_tags = title WHERE search_tags IS NULL AND title IS NOT NULL;
         """))
 
-        # Create external_contacts table index if it doesn't exist
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_external_contacts_phone ON external_contacts(phone_number);
-        """))
-
-        # Migration: Add last_channel column to external_contacts if it doesn't exist
-        await conn.execute(text("""
-            ALTER TABLE external_contacts ADD COLUMN IF NOT EXISTS last_channel VARCHAR DEFAULT 'sms';
-        """))
-
         # Scheduled events: partial index for efficient due-event polling
         await conn.execute(text("""
             CREATE INDEX IF NOT EXISTS ix_scheduled_events_next_fire
@@ -593,11 +374,6 @@ async def init_db():
             WHERE is_active = true;
         """))
 
-        # Persistent databases table: index on name for lookups
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_persistent_databases_name ON persistent_databases(name);
-        """))
-
         # Documents table: migration safety for existing databases
         await conn.execute(text("""
             CREATE INDEX IF NOT EXISTS ix_documents_user_id ON documents(user_id);
@@ -606,44 +382,12 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS ix_documents_updated_at ON documents(updated_at DESC);
         """))
 
-        # Files table: indexes for common queries
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_files_category ON files(category);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_files_source ON files(source);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_files_created_at ON files(created_at);
-        """))
-
         # Heartbeat: migration for allowed_senders column
         await conn.execute(text("""
             ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS allowed_senders TEXT;
         """))
 
         # Heartbeat: per-track config columns
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS imessage_enabled BOOLEAN DEFAULT true;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS imessage_poll_seconds INTEGER DEFAULT 10;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS calendar_enabled BOOLEAN DEFAULT false;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS calendar_poll_seconds INTEGER DEFAULT 300;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS calendar_lookahead_minutes INTEGER DEFAULT 30;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN DEFAULT false;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS email_poll_seconds INTEGER DEFAULT 300;
-        """))
         await conn.execute(text("""
             ALTER TABLE heartbeat_config ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT false;
         """))
@@ -657,14 +401,6 @@ async def init_db():
         """))
         await conn.execute(text("""
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS reinforcement_count INTEGER DEFAULT 0;
-        """))
-
-        # Consolidation: merge/promotion tracking columns
-        await conn.execute(text("""
-            ALTER TABLE consolidation_cycles ADD COLUMN IF NOT EXISTS merges_performed INTEGER DEFAULT 0;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE consolidation_cycles ADD COLUMN IF NOT EXISTS promotions INTEGER DEFAULT 0;
         """))
 
         # Heartbeat: migration for contact_name column
@@ -701,59 +437,6 @@ async def init_db():
             WHERE consumed = false;
         """))
 
-        # Memory connections: indexes for lookup by either side
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_memory_connections_a ON memory_connections(memory_id_a);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_memory_connections_b ON memory_connections(memory_id_b);
-        """))
-
-        # Memory flags: index for unresolved flags
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_memory_flags_unresolved ON memory_flags(memory_id)
-            WHERE resolved = false;
-        """))
-
-        # Claude Code sessions: indexes
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_cc_sessions_conversation ON claude_code_sessions(conversation_id);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_cc_sessions_status ON claude_code_sessions(status);
-        """))
-
-        # Evolution history: indexes
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_evolution_history_status ON evolution_history(status);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_evolution_history_created ON evolution_history(created_at DESC);
-        """))
-
-        # Orchestrator: migration for new columns
-        await conn.execute(text("""
-            ALTER TABLE orchestrator_tasks ADD COLUMN IF NOT EXISTS task_type VARCHAR DEFAULT 'internal_worker';
-        """))
-        await conn.execute(text("""
-            ALTER TABLE orchestrator_tasks ADD COLUMN IF NOT EXISTS cc_session_id VARCHAR;
-        """))
-        await conn.execute(text("""
-            ALTER TABLE orchestrator_config ADD COLUMN IF NOT EXISTS max_concurrent_cc_sessions INTEGER DEFAULT 2;
-        """))
-
-        # Orchestrator tasks: indexes
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_orchestrator_tasks_parent ON orchestrator_tasks(parent_conversation_id);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_orchestrator_tasks_worker ON orchestrator_tasks(worker_conversation_id);
-        """))
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_orchestrator_tasks_active ON orchestrator_tasks(status)
-            WHERE status IN ('pending', 'running');
-        """))
-
     # Create default settings if not exists
     async with async_session() as session:
         from sqlalchemy import select
@@ -768,27 +451,6 @@ async def init_db():
         if not result.scalar_one_or_none():
             default_config = HeartbeatConfigModel(id="default")
             session.add(default_config)
-            await session.commit()
-
-        # Create default consolidation config if not exists
-        result = await session.execute(select(ConsolidationConfigModel).where(ConsolidationConfigModel.id == "default"))
-        if not result.scalar_one_or_none():
-            default_consolidation = ConsolidationConfigModel(id="default")
-            session.add(default_consolidation)
-            await session.commit()
-
-        # Create default evolution config if not exists
-        result = await session.execute(select(EvolutionConfigModel).where(EvolutionConfigModel.id == "default"))
-        if not result.scalar_one_or_none():
-            default_evolution = EvolutionConfigModel(id="default")
-            session.add(default_evolution)
-            await session.commit()
-
-        # Create default orchestrator config if not exists
-        result = await session.execute(select(OrchestratorConfigModel).where(OrchestratorConfigModel.id == "default"))
-        if not result.scalar_one_or_none():
-            default_orchestrator = OrchestratorConfigModel(id="default")
-            session.add(default_orchestrator)
             await session.commit()
 
 async def get_session() -> AsyncSession:

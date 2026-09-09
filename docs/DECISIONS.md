@@ -47,7 +47,7 @@ External-service facts, corpus-level policy, and ops details that no single file
 
 **Deleted features are not re-proposed without a usage case.** The 2026-09-09 review measured actual use from the database (145 user conversations, 21/26 orchestrator failures, 65 self-audit documents, 0 Twilio contacts, no heartbeat events since March). Anything on the Plan 001 cut list comes back only when the owner names a concrete use.
 
-**Backups live outside the repo** at `C:\Users\cchen362\edward-backups\`. Pre-revival dump: `edward-pre-revival-2026-09-09.sql` (36 tables, taken from the `edward-pg` Docker container). Take a fresh dump before any table drop.
+**Backups live outside the repo** at `C:\Users\cchen362\edward-backups\`. Pre-revival dump: `edward-pre-revival-2026-09-09.sql` (36 tables, taken from the `edward-pg` Docker container). Pre-M5 dump: `edward-pre-m5-2026-09-09.sql` (35 tables, taken immediately before the Plan 001 M5 deletes and drops; the only copy of the 55 self-audit documents, 82 self-audit / worker conversations, 3 notebook memories and 18 dropped tables). Take a fresh dump before any table drop.
 
 **PostgreSQL runs in Docker Desktop** as container `edward-pg` (image `pgvector/pgvector:pg16`, port 5432). `pg_dump` is not installed on the host; run it inside the container.
 
