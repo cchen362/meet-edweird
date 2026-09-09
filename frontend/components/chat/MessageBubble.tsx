@@ -5,9 +5,6 @@ import { cn } from "@/lib/utils";
 import { User, AlertCircle, FileText, X, Copy, Check, Activity, Clock } from "lucide-react";
 import { EdwardAvatar } from "@/components/EdwardAvatar";
 import { MarkdownContent } from "./MarkdownContent";
-import { CodeBlock } from "./CodeBlock";
-import { PlanBlock } from "./PlanBlock";
-import { CCSessionBlock } from "./CCSessionBlock";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import type { Message, MessageAttachment } from "@/lib/ChatContext";
 
@@ -155,7 +152,6 @@ function TriggerCard({ message }: { message: Message }) {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const hasCodeBlocks = message.codeBlocks && message.codeBlocks.length > 0;
   const hasAttachments = message.attachments && message.attachments.length > 0;
   const [copied, setCopied] = useState(false);
 
@@ -204,29 +200,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             />
           )}
 
-          {/* Plan block */}
-          {message.planBlock && (
-            <PlanBlock block={message.planBlock} />
-          )}
-
-          {/* CC session blocks */}
-          {message.ccSessions && message.ccSessions.length > 0 && (
-            <div className="mb-2">
-              {message.ccSessions.map((session) => (
-                <CCSessionBlock key={session.id} session={session} />
-              ))}
-            </div>
-          )}
-
-          {/* Code blocks */}
-          {hasCodeBlocks && (
-            <div className="mb-2">
-              {message.codeBlocks!.map((block) => (
-                <CodeBlock key={block.id} block={block} />
-              ))}
-            </div>
-          )}
-
           {/* Text content */}
           {message.content && (
             isUser ? (
@@ -237,7 +210,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
 
           {/* Empty state for assistant messages that are still loading */}
-          {!isUser && !message.content && !hasCodeBlocks && !message.planBlock && !message.wasInterrupted && !(message.progressSteps && message.progressSteps.length > 0) && (
+          {!isUser && !message.content && !message.wasInterrupted && !(message.progressSteps && message.progressSteps.length > 0) && (
             <ThinkingIndicator content="Thinking..." />
           )}
 

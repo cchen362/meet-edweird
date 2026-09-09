@@ -1,48 +1,13 @@
 """
 ToolRegistry: Unified tool management for Edward.
 
-Collects tools from multiple sources (memory, WhatsApp, MCP) and filters
-based on skill enabled state from the database.
+Collects tools from multiple sources (memory, documents, scheduled events,
+push, heartbeat, search, WhatsApp, custom MCP) and filters based on skill
+enabled state from the database.
 """
 
 from typing import List, Any, Dict
 
-
-# Skill-to-tool mapping
-# Maps skill IDs to the tool names they gate
-SKILL_TOOL_MAPPING: Dict[str, List[str]] = {
-    "code_interpreter": ["execute_code", "list_sandbox_files", "read_sandbox_file"],
-    "javascript_interpreter": ["execute_javascript", "list_sandbox_files", "read_sandbox_file"],
-    "sql_interpreter": [
-        "execute_sql", "list_sandbox_files", "read_sandbox_file",
-    ],
-    "shell_interpreter": ["execute_shell", "list_sandbox_files", "read_sandbox_file"],
-    "brave_search": ["web_search", "fetch_page_content"],
-    "orchestrator": ["spawn_worker", "check_worker", "list_workers", "cancel_worker", "wait_for_workers", "send_to_worker", "spawn_cc_worker"],
-    "notebooklm": [
-        # Notebook management
-        "nlm_list_notebooks", "nlm_create_notebook", "nlm_delete_notebook",
-        "nlm_get_notebook", "nlm_describe_notebook", "nlm_rename_notebook",
-        # Source management
-        "nlm_add_source", "nlm_list_sources", "nlm_delete_source",
-        "nlm_get_source_text", "nlm_add_drive_source", "nlm_rename_source",
-        "nlm_describe_source",
-        # Chat
-        "nlm_ask", "nlm_configure_chat",
-        # Research
-        "nlm_research", "nlm_poll_research", "nlm_import_research",
-        # Artifacts / Studio
-        "nlm_generate_artifact", "nlm_wait_artifact",
-        "nlm_delete_artifact", "nlm_revise_slides",
-        # Sharing
-        "nlm_share_status", "nlm_share_public", "nlm_share_invite",
-        # Notes
-        "nlm_note",
-        # Edward bridge tools
-        "nlm_push_document",
-    ],
-    # "whatsapp_mcp" and "apple_services" tools are handled dynamically since they come from MCP
-}
 
 # Track initialized state
 _initialized = False
@@ -97,13 +62,7 @@ async def _get_skill_states(force_refresh: bool = False) -> Dict[str, bool]:
     _skill_cache = {
         "whatsapp_mcp": await is_skill_enabled("whatsapp_mcp"),
         "brave_search": await is_skill_enabled("brave_search"),
-        "code_interpreter": await is_skill_enabled("code_interpreter"),
-        "javascript_interpreter": await is_skill_enabled("javascript_interpreter"),
-        "sql_interpreter": await is_skill_enabled("sql_interpreter"),
-        "shell_interpreter": await is_skill_enabled("shell_interpreter"),
         "push_notifications": await is_skill_enabled("push_notifications"),
-        "orchestrator": await is_skill_enabled("orchestrator"),
-        "notebooklm": await is_skill_enabled("notebooklm"),
     }
     _cache_timestamp = now
 
@@ -112,31 +71,25 @@ async def _get_skill_states(force_refresh: bool = False) -> Dict[str, bool]:
 
 def _get_memory_tools() -> List[Any]:
     """Get memory tools (always available)."""
-    from services.graph.tools import MEMORY_TOOLS
+    from services.graph.tools.memory import MEMORY_TOOLS
     return MEMORY_TOOLS
 
 
 def _get_document_tools() -> List[Any]:
     """Get document tools (always available)."""
-    from services.graph.tools import DOCUMENT_TOOLS
+    from services.graph.tools.documents import DOCUMENT_TOOLS
     return DOCUMENT_TOOLS
-
-
-def _get_plan_tools() -> List[Any]:
-    """Get plan tools (always available)."""
-    from services.graph.tools import PLAN_TOOLS
-    return PLAN_TOOLS
 
 
 def _get_scheduled_event_tools() -> List[Any]:
     """Get scheduled event tools (always available)."""
-    from services.graph.tools import SCHEDULED_EVENT_TOOLS
+    from services.graph.tools.scheduled_events import SCHEDULED_EVENT_TOOLS
     return SCHEDULED_EVENT_TOOLS
 
 
 def _get_heartbeat_tools() -> List[Any]:
     """Get heartbeat tools (always available)."""
-    from services.graph.tools import HEARTBEAT_TOOLS
+    from services.graph.tools.heartbeat import HEARTBEAT_TOOLS
     return HEARTBEAT_TOOLS
 
 
@@ -149,7 +102,7 @@ async def _get_push_notification_tools(skill_states: Dict[str, bool]) -> List[An
     if not is_configured():
         return []
 
-    from services.graph.tools import PUSH_NOTIFICATION_TOOLS
+    from services.graph.tools.push import PUSH_NOTIFICATION_TOOLS
     return PUSH_NOTIFICATION_TOOLS
 
 
@@ -184,71 +137,9 @@ def _get_search_tools(skill_states: Dict[str, bool]) -> List[Any]:
     if not skill_states.get("brave_search"):
         return []
 
-    from services.graph.tools import web_search, fetch_page_content
+    from services.graph.tools.search import web_search, fetch_page_content
 
     return [web_search, fetch_page_content]
-
-
-def _get_code_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """
-    Get code execution tools if code_interpreter is enabled.
-
-    Args:
-        skill_states: Dict of skill_id -> enabled
-
-    Returns:
-        List of code execution tools
-    """
-    if not skill_states.get("code_interpreter"):
-        return []
-
-    from services.graph.tools import CODE_EXECUTION_TOOLS
-    return CODE_EXECUTION_TOOLS
-
-
-def _get_javascript_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get JavaScript execution tools if javascript_interpreter is enabled."""
-    if not skill_states.get("javascript_interpreter"):
-        return []
-
-    from services.graph.tools import JAVASCRIPT_EXECUTION_TOOLS
-    return JAVASCRIPT_EXECUTION_TOOLS
-
-
-def _get_sql_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get SQL execution tools if sql_interpreter is enabled."""
-    if not skill_states.get("sql_interpreter"):
-        return []
-
-    from services.graph.tools import SQL_EXECUTION_TOOLS
-    return SQL_EXECUTION_TOOLS
-
-
-def _get_shell_execution_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get shell execution tools if shell_interpreter is enabled."""
-    if not skill_states.get("shell_interpreter"):
-        return []
-
-    from services.graph.tools import SHELL_EXECUTION_TOOLS
-    return SHELL_EXECUTION_TOOLS
-
-
-def _get_orchestrator_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get orchestrator tools if orchestrator skill is enabled."""
-    if not skill_states.get("orchestrator"):
-        return []
-
-    from services.graph.tools import ORCHESTRATOR_TOOLS
-    return ORCHESTRATOR_TOOLS
-
-
-def _get_notebooklm_tools(skill_states: Dict[str, bool]) -> List[Any]:
-    """Get NotebookLM tools if notebooklm skill is enabled."""
-    if not skill_states.get("notebooklm"):
-        return []
-
-    from services.graph.tools import NOTEBOOKLM_TOOLS
-    return NOTEBOOKLM_TOOLS
 
 
 def _get_custom_mcp_tools() -> List[Any]:
@@ -266,6 +157,11 @@ def _get_custom_mcp_self_service_tools() -> List[Any]:
     return CUSTOM_MCP_TOOLS
 
 
+# D-001-4: Edward does not spawn workers, self-code, or execute code. The orchestrator,
+# evolution, Claude Code session, code-sandbox, and task-plan tools were deleted in
+# Plan 001 M3 after the 2026-09-09 usage review (21 of 26 orchestrator tasks failed,
+# no companion use). Do not re-add a worker, self-edit, or code-execution tool here
+# without a concrete usage case from the owner (see docs/DECISIONS.md, D-001-4).
 async def get_available_tools() -> List[Any]:
     """
     Get all tools that are currently available based on skill state.
@@ -280,7 +176,7 @@ async def get_available_tools() -> List[Any]:
     seen_names = set()
 
     def add_tools(new_tools: List[Any]) -> None:
-        """Add tools, deduplicating shared tools like list_sandbox_files."""
+        """Add tools, deduplicating by tool name."""
         for tool in new_tools:
             if tool.name not in seen_names:
                 tools.append(tool)
@@ -291,9 +187,6 @@ async def get_available_tools() -> List[Any]:
 
     # Document tools are always available
     add_tools(_get_document_tools())
-
-    # Plan tools are always available
-    tools.extend(_get_plan_tools())
 
     # Scheduled event tools are always available
     add_tools(_get_scheduled_event_tools())
@@ -309,22 +202,6 @@ async def get_available_tools() -> List[Any]:
 
     # Add search tools if enabled
     add_tools(_get_search_tools(skill_states))
-
-    # Add execution tools if enabled
-    add_tools(_get_code_execution_tools(skill_states))
-    add_tools(_get_javascript_execution_tools(skill_states))
-    add_tools(_get_sql_execution_tools(skill_states))
-    add_tools(_get_shell_execution_tools(skill_states))
-
-    # Evolution tools are always available
-    from services.graph.tools import EVOLUTION_TOOLS
-    add_tools(EVOLUTION_TOOLS)
-
-    # Orchestrator tools if enabled
-    add_tools(_get_orchestrator_tools(skill_states))
-
-    # NotebookLM tools if enabled
-    add_tools(_get_notebooklm_tools(skill_states))
 
     # Custom MCP self-service tools (always available)
     add_tools(_get_custom_mcp_self_service_tools())
@@ -345,19 +222,12 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     Returns:
         Formatted string for system prompt
     """
-    from services.graph.tools import (
-        get_memory_tools_description,
-        get_document_tools_description,
-        get_plan_tools_description,
-        get_scheduled_event_tools_description,
-        get_search_tools_description,
-        get_code_execution_tools_description,
-        get_javascript_execution_tools_description,
-        get_sql_execution_tools_description,
-        get_shell_execution_tools_description,
-        get_push_notification_tools_description,
-        get_heartbeat_tools_description,
-    )
+    from services.graph.tools.memory import get_memory_tools_description
+    from services.graph.tools.documents import get_document_tools_description
+    from services.graph.tools.scheduled_events import get_scheduled_event_tools_description
+    from services.graph.tools.search import get_search_tools_description
+    from services.graph.tools.push import get_push_notification_tools_description
+    from services.graph.tools.heartbeat import get_heartbeat_tools_description
 
     # Get tool names for filtering
     tool_names = {t.name for t in tools}
@@ -372,10 +242,6 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     if any(name in tool_names for name in ["save_document", "read_document", "edit_document", "search_documents", "list_documents", "delete_document"]):
         sections.append(get_document_tools_description())
 
-    # Plan tools section (always included)
-    if any(name in tool_names for name in ["create_plan", "update_plan_step", "edit_plan", "complete_plan"]):
-        sections.append(get_plan_tools_description())
-
     # Scheduled event tools section (always included)
     if any(name in tool_names for name in ["schedule_event", "list_scheduled_events", "cancel_scheduled_event"]):
         sections.append(get_scheduled_event_tools_description())
@@ -388,40 +254,9 @@ def get_tool_descriptions(tools: List[Any]) -> str:
     if any(name in tool_names for name in ["web_search", "fetch_page_content"]):
         sections.append(get_search_tools_description())
 
-    # Code execution tools section
-    if "execute_code" in tool_names:
-        sections.append(get_code_execution_tools_description())
-
-    # JavaScript execution tools section
-    if "execute_javascript" in tool_names:
-        sections.append(get_javascript_execution_tools_description())
-
-    # SQL execution tools section
-    if "execute_sql" in tool_names:
-        sections.append(get_sql_execution_tools_description())
-
-    # Shell execution tools section
-    if "execute_shell" in tool_names:
-        sections.append(get_shell_execution_tools_description())
-
     # Push notification tools section
     if "send_push_notification" in tool_names:
         sections.append(get_push_notification_tools_description())
-
-    # Evolution tools section
-    if "trigger_self_evolution" in tool_names:
-        from services.graph.tools import get_evolution_tools_description
-        sections.append(get_evolution_tools_description())
-
-    # Orchestrator tools section
-    if "spawn_worker" in tool_names:
-        from services.graph.tools import get_orchestrator_tools_description
-        sections.append(get_orchestrator_tools_description())
-
-    # NotebookLM tools section
-    if any(name.startswith("nlm_") for name in tool_names):
-        from services.graph.tools import get_notebooklm_tools_description
-        sections.append(get_notebooklm_tools_description())
 
     # GitHub MCP tools section (guardrail for write actions)
     # Sentinel: github-mcp-server always exposes "get_me" (prefixed as "github_get_me" by custom MCP)
@@ -471,19 +306,3 @@ No restart required — new tools become available immediately.
 Use "npx" runtime for Node.js/TypeScript packages, "uvx" for Python packages, and "binary" for pre-installed native binaries already on PATH (package_name becomes the command directly, no package manager involved).
 Environment variables can be passed as a JSON object to configure servers that need API keys.
 To update env vars on an existing server, use update_mcp_server — env vars merge by default (set a key to "" to remove it)."""
-
-
-async def get_worker_tools() -> List[Any]:
-    """
-    Get tools available to worker agents.
-
-    Workers get all normal tools EXCEPT evolution and orchestrator tools
-    (prevents workers from spawning sub-workers or self-evolving).
-    """
-    from services.graph.tools import EVOLUTION_TOOL_NAMES, ORCHESTRATOR_TOOL_NAMES
-
-    excluded = EVOLUTION_TOOL_NAMES | ORCHESTRATOR_TOOL_NAMES
-    all_tools = await get_available_tools()
-    return [t for t in all_tools if t.name not in excluded]
-
-

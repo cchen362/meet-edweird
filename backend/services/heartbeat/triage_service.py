@@ -113,9 +113,9 @@ You are currently in your inner mind. This is not a conversation with anyone —
 - Tool calls are your ONLY way to interact with the outside world. To reply to someone, you MUST call a messaging tool. To take any action, you MUST use a tool.
 
 You have full tool access here — not just messaging. You can:
-- Save knowledge (memories, documents, NotebookLM notebooks)
+- Save knowledge (memories, documents)
 - Schedule follow-up actions for later
-- Research before responding (web search, notebook queries)
+- Research before responding (web search)
 - Decide NOT to act if that's the right call
 
 Think freely, reason through what's needed, then ACT through tools.
@@ -477,7 +477,7 @@ async def _execute_classification(
         # Run chat_with_memory — failure here should NOT block push notification
         try:
             from services.graph import chat_with_memory
-            from services.graph.tools import set_current_conversation_id
+            from services.graph.tools.context import set_current_conversation_id
             from services.settings_service import get_settings
 
             settings = await get_settings()

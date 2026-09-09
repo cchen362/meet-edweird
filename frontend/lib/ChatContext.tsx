@@ -20,52 +20,6 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 
-// Code execution block within a message
-export interface CodeBlock {
-  id: string;
-  code: string;
-  language: string;
-  output?: string;
-  success?: boolean;
-  duration_ms?: number;
-  isExecuting: boolean;
-}
-
-// Plan step within a plan block
-export interface PlanStep {
-  id: string;
-  title: string;
-  status: "pending" | "in_progress" | "completed" | "error";
-  result?: string | null;
-}
-
-// Plan block within a message
-export interface PlanBlock {
-  id: string;
-  steps: PlanStep[];
-  isComplete: boolean;
-  summary?: string | null;
-}
-
-// CC session event within an inline CC session block
-export interface CCSessionEvent {
-  id: string;
-  type: "text" | "tool_use" | "tool_result";
-  text?: string;
-  toolName?: string;
-  toolInput?: string;
-  timestamp: number;
-}
-
-// CC session block within a message
-export interface CCSession {
-  id: string;           // task_id
-  description: string;
-  status: "running" | "completed" | "failed";
-  events: CCSessionEvent[];
-  resultSummary?: string;
-}
-
 // Progress step for showing discrete progress during operations
 export interface ProgressStep {
   id: string;
@@ -90,14 +44,11 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   // Optional fields for enhanced messages
-  codeBlocks?: CodeBlock[];
-  planBlock?: PlanBlock;
   progressSteps?: ProgressStep[];
   isThinking?: boolean;
   thinkingContent?: string;
   wasInterrupted?: boolean;
   attachments?: MessageAttachment[];
-  ccSessions?: CCSession[];
   isTrigger?: boolean;
   triggerType?: string;
 }
@@ -379,25 +330,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return message;
       });
 
-      // Attach CC session summaries to the last assistant message
-      if (data.cc_sessions && data.cc_sessions.length > 0) {
-        for (let i = mappedMessages.length - 1; i >= 0; i--) {
-          if (mappedMessages[i].role === "assistant") {
-            mappedMessages[i] = {
-              ...mappedMessages[i],
-              ccSessions: data.cc_sessions.map((s) => ({
-                id: s.task_id,
-                description: s.description,
-                status: s.status === "completed" ? "completed" : "failed",
-                events: [],
-                resultSummary: s.result_summary || undefined,
-              })),
-            };
-            break;
-          }
-        }
-      }
-
       setMessages(mappedMessages);
     } catch (error) {
       console.error("Error loading conversation:", error);
@@ -499,7 +431,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         id: assistantMessageId,
         role: "assistant",
         content: "",
-        codeBlocks: [],
         progressSteps: [],
         isThinking: false,
         wasInterrupted: false,
@@ -513,8 +444,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       streamingContentRef.current = "";
       let newConversationId: string | undefined;
-      let currentCodeBlock: CodeBlock | null = null;
-      let codeBlockCounter = 0;
       let doneSeen = false;
       let contentSeen = false;
 
@@ -532,10 +461,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           return newMessages;
         });
       };
-
-      const EXECUTION_TOOLS = new Set([
-        "execute_code", "execute_javascript", "execute_sql", "execute_shell",
-      ]);
 
       try {
 
@@ -603,272 +528,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               }
               break;
 
-            case "tool_start":
-              if (event.tool_name && EXECUTION_TOOLS.has(event.tool_name)) {
-                // Create a new code block and immediately add to message state
-                codeBlockCounter++;
-                currentCodeBlock = {
-                  id: `code-${assistantMessageId}-${codeBlockCounter}`,
-                  code: "",
-                  language: "python",
-                  isExecuting: true,
-                };
-                const newBlock = { ...currentCodeBlock };
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId) {
-                    const existingBlocks = [...(lastMessage.codeBlocks || [])];
-                    existingBlocks.push(newBlock);
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      codeBlocks: existingBlocks,
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "code":
-              if (currentCodeBlock && event.code) {
-                currentCodeBlock.code = event.code;
-                currentCodeBlock.language = event.language || "python";
-                const updatedBlock = { ...currentCodeBlock };
-                // Upsert the code block in message state
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId) {
-                    const existingBlocks = [...(lastMessage.codeBlocks || [])];
-                    const existingIndex = existingBlocks.findIndex(b => b.id === updatedBlock.id);
-                    if (existingIndex >= 0) {
-                      existingBlocks[existingIndex] = updatedBlock;
-                    } else {
-                      existingBlocks.push(updatedBlock);
-                    }
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      codeBlocks: existingBlocks,
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "execution_output":
-              if (currentCodeBlock && event.output) {
-                currentCodeBlock.output = (currentCodeBlock.output || "") + event.output;
-                const updatedBlock = { ...currentCodeBlock };
-                // Upsert the code block with output
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId) {
-                    const existingBlocks = [...(lastMessage.codeBlocks || [])];
-                    const blockIndex = existingBlocks.findIndex(b => b.id === updatedBlock.id);
-                    if (blockIndex >= 0) {
-                      existingBlocks[blockIndex] = updatedBlock;
-                    } else {
-                      existingBlocks.push(updatedBlock);
-                    }
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      codeBlocks: existingBlocks,
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "execution_result":
-              if (currentCodeBlock) {
-                currentCodeBlock.success = event.success;
-                currentCodeBlock.duration_ms = event.duration_ms;
-                currentCodeBlock.isExecuting = false;
-                const updatedBlock = { ...currentCodeBlock };
-                // Upsert the code block with result
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId) {
-                    const existingBlocks = [...(lastMessage.codeBlocks || [])];
-                    const blockIndex = existingBlocks.findIndex(b => b.id === updatedBlock.id);
-                    if (blockIndex >= 0) {
-                      existingBlocks[blockIndex] = updatedBlock;
-                    } else {
-                      existingBlocks.push(updatedBlock);
-                    }
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      codeBlocks: existingBlocks,
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
             case "tool_end":
-              // Clear thinking state and reset current code block
+              // Clear thinking state
               updateAssistantMessage({ isThinking: false });
-              currentCodeBlock = null;
-              break;
-
-            case "plan_created":
-              if (event.plan_steps) {
-                const planBlock: PlanBlock = {
-                  id: `plan-${assistantMessageId}`,
-                  steps: event.plan_steps.map(s => ({
-                    id: s.id,
-                    title: s.title,
-                    status: s.status as PlanStep["status"],
-                    result: s.result,
-                  })),
-                  isComplete: false,
-                };
-                updateAssistantMessage({ planBlock });
-              }
-              break;
-
-            case "plan_step_update":
-              if (event.step_id) {
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId && lastMessage.planBlock) {
-                    const updatedSteps = lastMessage.planBlock.steps.map(step =>
-                      step.id === event.step_id
-                        ? { ...step, status: (event.step_status || step.status) as PlanStep["status"], result: event.step_result ?? step.result }
-                        : step
-                    );
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      planBlock: { ...lastMessage.planBlock, steps: updatedSteps },
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "plan_updated":
-              if (event.plan_steps) {
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId && lastMessage.planBlock) {
-                    newMessages[newMessages.length - 1] = {
-                      ...lastMessage,
-                      planBlock: {
-                        ...lastMessage.planBlock,
-                        steps: event.plan_steps!.map(s => ({
-                          id: s.id,
-                          title: s.title,
-                          status: s.status as PlanStep["status"],
-                          result: s.result,
-                        })),
-                      },
-                    };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "plan_completed":
-              setMessages((prev) => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId && lastMessage.planBlock) {
-                  const finalSteps = event.plan_steps
-                    ? event.plan_steps.map(s => ({
-                        id: s.id,
-                        title: s.title,
-                        status: s.status as PlanStep["status"],
-                        result: s.result,
-                      }))
-                    : lastMessage.planBlock.steps.map(s => ({ ...s, status: "completed" as const }));
-                  newMessages[newMessages.length - 1] = {
-                    ...lastMessage,
-                    planBlock: {
-                      ...lastMessage.planBlock,
-                      steps: finalSteps,
-                      isComplete: true,
-                      summary: event.plan_summary,
-                    },
-                  };
-                }
-                return newMessages;
-              });
-              break;
-
-            case "cc_session_start":
-              if (event.task_id) {
-                const newSession: CCSession = {
-                  id: event.task_id,
-                  description: event.task_description || "",
-                  status: "running",
-                  events: [],
-                };
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId) {
-                    const sessions = [...(lastMessage.ccSessions || []), newSession];
-                    newMessages[newMessages.length - 1] = { ...lastMessage, ccSessions: sessions };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "cc_text":
-            case "cc_tool_use":
-            case "cc_tool_result":
-              if (event.task_id) {
-                const ccEvent: CCSessionEvent = {
-                  id: `cc-evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  type: event.type === "cc_text" ? "text" : event.type === "cc_tool_use" ? "tool_use" : "tool_result",
-                  text: event.text,
-                  toolName: event.cc_tool_name,
-                  toolInput: event.tool_input,
-                  timestamp: Date.now(),
-                };
-                const targetTaskId = event.task_id;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId && lastMessage.ccSessions) {
-                    const sessions = lastMessage.ccSessions.map((s) =>
-                      s.id === targetTaskId ? { ...s, events: [...s.events, ccEvent] } : s
-                    );
-                    newMessages[newMessages.length - 1] = { ...lastMessage, ccSessions: sessions };
-                  }
-                  return newMessages;
-                });
-              }
-              break;
-
-            case "cc_session_end":
-              if (event.task_id) {
-                const endTaskId = event.task_id;
-                const endStatus = event.status === "completed" ? "completed" : "failed";
-                const endSummary = event.result_summary;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant" && lastMessage.id === assistantMessageId && lastMessage.ccSessions) {
-                    const sessions = lastMessage.ccSessions.map((s) =>
-                      s.id === endTaskId ? { ...s, status: endStatus as CCSession["status"], resultSummary: endSummary } : s
-                    );
-                    newMessages[newMessages.length - 1] = { ...lastMessage, ccSessions: sessions };
-                  }
-                  return newMessages;
-                });
-              }
               break;
 
             case "content":
@@ -928,11 +590,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 ...lastMessage,
                 wasInterrupted: true,
                 isThinking: false,
-                // Clear any in-progress code blocks
-                codeBlocks: lastMessage.codeBlocks?.map(block => ({
-                  ...block,
-                  isExecuting: false,
-                })),
               };
             }
             return newMessages;

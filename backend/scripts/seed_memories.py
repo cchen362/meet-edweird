@@ -27,42 +27,17 @@ if not os.getenv("DATABASE_URL"):
     os.environ["DATABASE_URL"] = "postgresql://edward:edward@localhost:5432/edward"
 
 SEED_MEMORIES = [
-    # --- NotebookLM (6) ---
-    {
-        "content": "When a topic comes up repeatedly across conversations -- like a health condition, a project, or a hobby -- I should create a NotebookLM notebook for it. Notebooks cross-reference multiple sources in ways my documents and memories can't.",
-        "importance": 0.85,
-    },
-    {
-        "content": "When someone shares multiple URLs, articles, or PDFs about the same topic, I should consider adding them to a notebook rather than saving them individually. That way they can be queried together with citations.",
-        "importance": 0.85,
-    },
-    {
-        "content": "nlm_ask gives me source-grounded answers with citations from curated sources. web_search gives me real-time but unverified results. For topics where accuracy and sourcing matter, I should build a notebook first.",
-        "importance": 0.85,
-    },
-    {
-        "content": "Audio overviews (nlm_generate_artifact type='audio') are surprisingly effective for summarizing dense material. I should offer them when someone is learning about a complex topic.",
-        "importance": 0.80,
-    },
-    {
-        "content": "I can push my saved documents and files into NotebookLM notebooks using nlm_push_document and nlm_push_file. This lets me cross-reference my existing knowledge with new sources.",
-        "importance": 0.80,
-    },
-    {
-        "content": "nlm_research with mode='deep' is powerful for building comprehensive knowledge bases on new topics. When starting fresh research, I should create a notebook, run deep research, then use nlm_ask to synthesize.",
-        "importance": 0.85,
-    },
     # --- Knowledge Management (3) ---
     {
-        "content": "My knowledge has layers: memories for quick facts, documents for full reference text, and notebooks for multi-source research. I should use the right layer -- don't store a recipe as a memory, don't create a notebook for a single preference.",
+        "content": "My knowledge has layers: memories for quick facts and documents for full reference text. I should use the right layer -- don't store a recipe as a memory, don't create a document for a single preference.",
         "importance": 0.90,
     },
     {
-        "content": "After a web search reveals a topic I'll likely revisit, I should save the key findings as a document or add them to a relevant notebook. Transient web results get lost.",
+        "content": "After a web search reveals a topic I'll likely revisit, I should save the key findings as a document. Transient web results get lost.",
         "importance": 0.80,
     },
     {
-        "content": "When I notice I'm repeatedly searching for similar information, that's a signal I should build a more permanent knowledge structure -- a document, notebook, or database.",
+        "content": "When I notice I'm repeatedly searching for similar information, that's a signal I should build a more permanent knowledge structure -- a document.",
         "importance": 0.80,
     },
     # --- Proactive Behavior (3) ---
@@ -119,7 +94,7 @@ async def main():
         # Check for existing similar memory
         existing = await retrieve_memories(content, limit=1, update_access=False)
         if existing and existing[0].score >= SIMILARITY_THRESHOLD:
-            print(f"  [{i:2d}/16] SKIP (similar exists, score={existing[0].score:.2f}): {short}")
+            print(f"  [{i:2d}/10] SKIP (similar exists, score={existing[0].score:.2f}): {short}")
             skipped += 1
             continue
 
@@ -133,7 +108,7 @@ async def main():
             reinforcement_count=5,
         )
         stored = await store_memory(memory)
-        print(f"  [{i:2d}/16] CREATED (id={stored.id}): {short}")
+        print(f"  [{i:2d}/10] CREATED (id={stored.id}): {short}")
         created += 1
 
     print(f"\nDone: {created} created, {skipped} skipped")

@@ -1,5 +1,5 @@
 """
-Heartbeat orchestrator for Edward.
+Heartbeat coordinator for Edward.
 
 Manages the triage loop, active-chat gating, and briefing system.
 """

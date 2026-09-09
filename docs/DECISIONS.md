@@ -12,14 +12,14 @@ Owner decisions that any coding agent (Claude Code, Codex, or otherwise) must re
 
 ## Decisions anchored in code
 
-One line each. The code marker is authoritative; follow the pointer for the reasoning. Markers for D-001-4 and D-001-6 are stamped during the Plan 001 milestone that touches the governing code; until then the reasoning is in `docs/plans/001_REVIVAL_CLEANUP.md`.
+One line each. The code marker is authoritative; follow the pointer for the reasoning. The marker for D-001-6 is stamped during the Plan 001 milestone that touches the governing code; until then the reasoning is in `docs/plans/001_REVIVAL_CLEANUP.md`.
 
 | ID | Ruling | Reasoning lives in |
 |---|---|---|
 | D-001-1 | Windows is the only supported platform; no `sys.platform` branches. | `backend/main.py` (stamped 2026-09-09, M2) |
-| D-001-2 | Chat provider is GPT via Codex OAuth only; the Anthropic SDK is used solely for Haiku background calls. | `backend/services/graph/streaming.py` (stamped 2026-09-09, M4) |
+| D-001-2 | Chat provider is GPT via Codex OAuth only; the Anthropic SDK is used solely for Haiku background calls. | `backend/services/graph/codex.py` (stamped 2026-09-09, M4; moved from `streaming.py` in M3) |
 | D-001-3 | Background jobs stay on Claude Haiku 4.5. | `backend/services/llm_client.py` (stamped 2026-09-09, M4) |
-| D-001-4 | Edward does not spawn workers, self-code, or execute code. | `backend/services/tool_registry.py` (stamped in M3) |
+| D-001-4 | Edward does not spawn workers, self-code, or execute code. | `backend/services/tool_registry.py` (stamped 2026-09-09, M3) |
 | D-001-6 | No design commitment exists; chosen visually from mockups in Plan 004. No restyling before then. | `frontend/app/globals.css` (stamped in M6) |
 
 ## Superseded or hollowed-out — do not re-stamp

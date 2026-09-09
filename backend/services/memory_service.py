@@ -246,28 +246,6 @@ async def retrieve_memories(
         if update_access:
             await session.commit()
 
-        # Spreading activation: boost memories connected to other results
-        try:
-            from services.consolidation_service import get_connected_memory_ids
-            result_ids = {m.id for m in memories}
-            for memory in memories:
-                connected = await get_connected_memory_ids(memory.id)
-                for conn_id, strength in connected:
-                    if conn_id in result_ids:
-                        memory.score += 0.1 * strength
-        except Exception:
-            pass  # Consolidation service may not exist yet
-
-        # Flag annotation: append unresolved flags to content
-        try:
-            from services.consolidation_service import get_memory_flags
-            for memory in memories:
-                flags = await get_memory_flags(memory.id)
-                for flag in flags:
-                    memory.content += f" [FLAG: {flag['description']}]"
-        except Exception:
-            pass  # Consolidation service may not exist yet
-
         # Sort by combined score and return top results
         memories.sort(key=lambda m: m.score, reverse=True)
         if min_score is not None:

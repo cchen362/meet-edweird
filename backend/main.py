@@ -6,20 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-import logging
 import os
 
-from routers import chat, settings, debug, memories, conversations, webhooks, skills, events, auth, push, documents, heartbeat, custom_mcp, consolidation, evolution, orchestrator
+from routers import chat, settings, debug, memories, conversations, webhooks, skills, events, auth, push, documents, heartbeat, custom_mcp
 from services.database import init_db
-
-# Governance measurement log — persists turn samples to backend/logs/governance.jsonl
-_gov_log_path = os.path.join(os.path.dirname(__file__), "logs", "governance.jsonl")
-os.makedirs(os.path.dirname(_gov_log_path), exist_ok=True)
-_gov_handler = logging.FileHandler(_gov_log_path, encoding="utf-8")
-_gov_handler.setLevel(logging.DEBUG)
-_gov_logger = logging.getLogger("governance.sample")
-_gov_logger.addHandler(_gov_handler)
-_gov_logger.setLevel(logging.DEBUG)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,13 +52,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Custom MCP servers initialization skipped: {e}")
 
-    # Initialize NotebookLM client (if credentials exist)
-    try:
-        from services.notebooklm_service import initialize_notebooklm
-        await initialize_notebooklm()
-    except Exception as e:
-        print(f"NotebookLM initialization skipped: {e}")
-
     # Initialize tool registry (must be after skills and MCP)
     try:
         from services.tool_registry import initialize_registry
@@ -90,42 +73,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Heartbeat initialization error: {e}")
 
-    # Start the memory consolidation service
-    try:
-        from services.consolidation_service import start_consolidation
-        await start_consolidation()
-    except Exception as e:
-        print(f"Consolidation initialization error: {e}")
-
-    # Check for pending evolution deploys (finalize after restart)
-    try:
-        from services.evolution_service import check_pending_deploy
-        await check_pending_deploy()
-    except Exception as e:
-        print(f"Evolution deploy check error: {e}")
-
-    # Initialize orchestrator (recover crashed tasks)
-    try:
-        from services.orchestrator_service import start_orchestrator
-        await start_orchestrator()
-    except Exception as e:
-        print(f"Orchestrator initialization error: {e}")
-
     yield
 
     # Shutdown
-    try:
-        from services.orchestrator_service import stop_orchestrator
-        await stop_orchestrator()
-    except Exception as e:
-        print(f"Orchestrator shutdown error: {e}")
-
-    try:
-        from services.consolidation_service import stop_consolidation
-        await stop_consolidation()
-    except Exception as e:
-        print(f"Consolidation shutdown error: {e}")
-
     try:
         from services.heartbeat import stop_heartbeat
         await stop_heartbeat()
@@ -137,12 +87,6 @@ async def lifespan(app: FastAPI):
         await stop_scheduler()
     except Exception as e:
         print(f"Scheduler shutdown error: {e}")
-
-    try:
-        from services.notebooklm_service import shutdown_notebooklm
-        await shutdown_notebooklm()
-    except Exception as e:
-        print(f"NotebookLM shutdown error: {e}")
 
     try:
         from services.custom_mcp_service import shutdown_custom_servers
@@ -201,9 +145,6 @@ app.include_router(push.router, prefix="/api", tags=["push"])
 app.include_router(documents.router, prefix="/api", tags=["documents"])
 app.include_router(heartbeat.router, prefix="/api", tags=["heartbeat"])
 app.include_router(custom_mcp.router, prefix="/api", tags=["custom-mcp"])
-app.include_router(consolidation.router, prefix="/api", tags=["consolidation"])
-app.include_router(evolution.router, prefix="/api", tags=["evolution"])
-app.include_router(orchestrator.router, prefix="/api", tags=["orchestrator"])
 
 @app.get("/")
 async def root():

@@ -1,12 +1,9 @@
 """Router for conversation management endpoints."""
 
-import logging
 from fastapi import APIRouter, HTTPException
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
-
-logger = logging.getLogger(__name__)
 
 from services.conversation_service import (
     get_conversations,
@@ -51,14 +48,6 @@ class MessageResponse(BaseModel):
     trigger_type: Optional[str] = None
 
 
-class CCSessionSummaryResponse(BaseModel):
-    task_id: str
-    description: str
-    status: str
-    result_summary: Optional[str] = None
-    error: Optional[str] = None
-
-
 class ConversationWithMessagesResponse(BaseModel):
     id: str
     title: str
@@ -69,7 +58,6 @@ class ConversationWithMessagesResponse(BaseModel):
     updated_at: datetime
     message_count: int
     messages: List[MessageResponse]
-    cc_sessions: List[CCSessionSummaryResponse] = []
 
 
 class UpdateConversationRequest(BaseModel):
@@ -212,23 +200,6 @@ async def get_conversation_with_messages(conversation_id: str):
     except Exception as e:
         print(f"Error getting messages from checkpoint: {e}")
 
-    # Load CC session summaries for this conversation
-    cc_sessions: List[CCSessionSummaryResponse] = []
-    try:
-        from services.orchestrator_service import list_tasks
-        tasks = await list_tasks(parent_conversation_id=conversation_id)
-        for t in tasks:
-            if t.get("task_type") == "cc_session":
-                cc_sessions.append(CCSessionSummaryResponse(
-                    task_id=t["id"],
-                    description=t.get("task_description", ""),
-                    status=t.get("status", "unknown"),
-                    result_summary=t.get("result_summary"),
-                    error=t.get("error"),
-                ))
-    except Exception as e:
-        logger.warning(f"Failed to load CC sessions for {conversation_id}: {e}")
-
     return ConversationWithMessagesResponse(
         id=conversation.id,
         title=conversation.title,
@@ -239,7 +210,6 @@ async def get_conversation_with_messages(conversation_id: str):
         updated_at=conversation.updated_at,
         message_count=conversation.message_count,
         messages=messages,
-        cc_sessions=cc_sessions,
     )
 
 

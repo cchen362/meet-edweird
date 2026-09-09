@@ -364,7 +364,7 @@ export async function deleteDocument(documentId: string): Promise<{ status: stri
 }
 
 // Conversation types
-export type ConversationSource = "user" | "scheduled_event" | "external_message" | "heartbeat" | "orchestrator_worker";
+export type ConversationSource = "user" | "scheduled_event" | "external_message" | "heartbeat";
 export type ConversationChannel = "text" | "voice";
 
 export interface Conversation {
@@ -392,17 +392,8 @@ export interface ConversationMessage {
   trigger_type?: string;
 }
 
-export interface CCSessionSummary {
-  task_id: string;
-  description: string;
-  status: string;
-  result_summary: string | null;
-  error: string | null;
-}
-
 export interface ConversationWithMessages extends Conversation {
   messages: ConversationMessage[];
-  cc_sessions?: CCSessionSummary[];
 }
 
 export interface ConversationsResponse {
@@ -517,23 +508,11 @@ export type StreamEventType =
   | "thinking"
   | "progress"
   | "tool_start"
-  | "code"
-  | "execution_output"
-  | "execution_result"
   | "tool_end"
   | "content"
   | "error"
   | "done"
-  | "interrupted"
-  | "plan_created"
-  | "plan_step_update"
-  | "plan_updated"
-  | "plan_completed"
-  | "cc_session_start"
-  | "cc_text"
-  | "cc_tool_use"
-  | "cc_tool_result"
-  | "cc_session_end";
+  | "interrupted";
 
 export type ProgressStatus = "started" | "completed" | "error";
 
@@ -545,13 +524,6 @@ export interface ProgressStepData {
   tool_name?: string;
 }
 
-export interface PlanStepData {
-  id: string;
-  title: string;
-  status: "pending" | "in_progress" | "completed" | "error";
-  result?: string | null;
-}
-
 export interface StreamEvent {
   type: StreamEventType;
   conversation_id: string;
@@ -559,31 +531,12 @@ export interface StreamEvent {
   content?: string;        // for thinking, content, interrupted
   error?: string;          // for error (LLM failure message)
   tool_name?: string;      // for tool_start, tool_end, progress
-  code?: string;           // for code
-  language?: string;       // for code
-  output?: string;         // for execution_output
-  stream?: "stdout" | "stderr";  // for execution_output
-  success?: boolean;       // for execution_result
-  duration_ms?: number;    // for execution_result
   result?: string;         // for tool_end (truncated result)
   // Progress-specific fields
   step?: string;           // for progress (memory_search, tool_execution, generating)
   status?: ProgressStatus; // for progress
   message?: string;        // for progress
   count?: number;          // for progress (e.g., memory count)
-  // Plan-specific fields
-  plan_steps?: PlanStepData[];   // for plan_created, plan_updated, plan_completed
-  step_id?: string;              // for plan_step_update
-  step_status?: string;          // for plan_step_update
-  step_result?: string | null;   // for plan_step_update
-  plan_summary?: string | null;  // for plan_completed
-  // CC session fields
-  task_id?: string;              // for all cc_* events
-  task_description?: string;     // for cc_session_start
-  text?: string;                 // for cc_text, cc_tool_result
-  cc_tool_name?: string;         // for cc_tool_use
-  tool_input?: string;           // for cc_tool_use
-  result_summary?: string;       // for cc_session_end
 }
 
 // Skills API types
@@ -980,255 +933,4 @@ export async function getRecentSenders(limit = 50): Promise<AllowedSender[]> {
     throw new Error("Failed to fetch recent senders");
   }
   return response.json();
-}
-
-// ===== Evolution API =====
-
-export interface EvolutionConfig {
-  enabled: boolean;
-  min_interval_seconds: number;
-  auto_trigger: boolean;
-  require_tests: boolean;
-  max_files_per_cycle: number;
-}
-
-export interface EvolutionCycle {
-  id: string;
-  trigger: string;
-  description: string;
-  branch_name: string | null;
-  status: string;
-  step: string | null;
-  files_changed: string[];
-  test_output: string | null;
-  review_summary: string | null;
-  error: string | null;
-  rollback_tag: string | null;
-  cc_session_id: string | null;
-  duration_ms: number | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string | null;
-}
-
-export interface EvolutionStatus {
-  config: EvolutionConfig;
-  current_cycle: EvolutionCycle | null;
-  last_cycle_at: string | null;
-}
-
-export async function getEvolutionStatus(): Promise<EvolutionStatus> {
-  const response = await authFetch(`${API_URL}/api/evolution/status`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch evolution status");
-  }
-  return response.json();
-}
-
-export async function getEvolutionHistory(
-  limit = 20,
-  offset = 0,
-): Promise<EvolutionCycle[]> {
-  const params = new URLSearchParams({
-    limit: limit.toString(),
-    offset: offset.toString(),
-  });
-  const response = await authFetch(`${API_URL}/api/evolution/history?${params}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch evolution history");
-  }
-  return response.json();
-}
-
-export async function updateEvolutionConfig(
-  config: Partial<EvolutionConfig>,
-): Promise<EvolutionConfig> {
-  const response = await authFetch(`${API_URL}/api/evolution/config`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to update evolution config");
-  }
-  return response.json();
-}
-
-export async function triggerEvolution(
-  description: string,
-  trigger = "manual",
-): Promise<{ status: string; description: string }> {
-  const response = await authFetch(`${API_URL}/api/evolution/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description, trigger }),
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ detail: "Trigger failed" }));
-    throw new Error(data.detail || "Failed to trigger evolution");
-  }
-  return response.json();
-}
-
-export async function rollbackEvolution(
-  cycleId: string,
-): Promise<{ status: string; message: string }> {
-  const response = await authFetch(`${API_URL}/api/evolution/rollback/${cycleId}`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ detail: "Rollback failed" }));
-    throw new Error(data.detail || "Failed to rollback evolution");
-  }
-  return response.json();
-}
-
-// ============================
-// Orchestrator API
-// ============================
-
-export interface OrchestratorConfig {
-  enabled: boolean;
-  max_concurrent_workers: number;
-  max_concurrent_cc_sessions: number;
-  default_worker_model: string;
-  default_worker_timeout: number;
-}
-
-export interface OrchestratorTask {
-  id: string;
-  parent_conversation_id: string;
-  worker_conversation_id: string | null;
-  task_description: string;
-  task_type: string;
-  model: string | null;
-  cc_session_id: string | null;
-  status: string;
-  context_mode: string;
-  result_summary: string | null;
-  error: string | null;
-  timeout_seconds: number;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OrchestratorStatus {
-  config: OrchestratorConfig;
-  active_count: number;
-  recent_tasks: OrchestratorTask[];
-}
-
-export async function getOrchestratorStatus(): Promise<OrchestratorStatus> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/status`);
-  if (!response.ok) throw new Error("Failed to fetch orchestrator status");
-  return response.json();
-}
-
-export async function getOrchestratorTasks(params?: {
-  parent_conversation_id?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<OrchestratorTask[]> {
-  const searchParams = new URLSearchParams();
-  if (params?.parent_conversation_id) searchParams.set("parent_conversation_id", params.parent_conversation_id);
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.limit) searchParams.set("limit", String(params.limit));
-  if (params?.offset) searchParams.set("offset", String(params.offset));
-  const qs = searchParams.toString();
-  const response = await authFetch(`${API_URL}/api/orchestrator/tasks${qs ? `?${qs}` : ""}`);
-  if (!response.ok) throw new Error("Failed to fetch orchestrator tasks");
-  return response.json();
-}
-
-export async function getOrchestratorTask(taskId: string): Promise<OrchestratorTask> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/tasks/${taskId}`);
-  if (!response.ok) throw new Error("Failed to fetch orchestrator task");
-  return response.json();
-}
-
-export async function cancelOrchestratorTask(taskId: string): Promise<OrchestratorTask> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/tasks/${taskId}/cancel`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error("Failed to cancel orchestrator task");
-  return response.json();
-}
-
-export async function sendWorkerMessage(taskId: string, message: string): Promise<{ response: string }> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/tasks/${taskId}/message`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!response.ok) throw new Error("Failed to send worker message");
-  return response.json();
-}
-
-export async function getOrchestratorConfig(): Promise<OrchestratorConfig> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/config`);
-  if (!response.ok) throw new Error("Failed to fetch orchestrator config");
-  return response.json();
-}
-
-export async function updateOrchestratorConfig(config: Partial<OrchestratorConfig>): Promise<OrchestratorConfig> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/config`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!response.ok) throw new Error("Failed to update orchestrator config");
-  return response.json();
-}
-
-// CC Event streaming
-export interface CCEvent {
-  event_type: string;
-  session_id?: string;
-  text?: string;
-  tool_name?: string;
-  tool_input?: string;
-  error?: string;
-  status?: string;
-  reason?: string;
-  output_summary?: string;
-}
-
-export async function* streamTaskEvents(
-  taskId: string,
-  abortSignal?: AbortSignal,
-): AsyncGenerator<CCEvent, void, unknown> {
-  const response = await authFetch(`${API_URL}/api/orchestrator/tasks/${taskId}/events`, {
-    signal: abortSignal,
-  });
-
-  if (!response.ok) return;
-
-  const reader = response.body?.getReader();
-  if (!reader) return;
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6)) as CCEvent;
-          yield data;
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-  }
 }

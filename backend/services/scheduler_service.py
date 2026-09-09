@@ -117,7 +117,7 @@ def _build_scheduler_system_prompt(base_system_prompt: str, event) -> str:
 async def _execute_event(event) -> None:
     """Execute a single scheduled event by calling chat_with_memory."""
     from services.graph import chat_with_memory
-    from services.graph.tools import set_current_conversation_id
+    from services.graph.tools.context import set_current_conversation_id
     from services.settings_service import get_settings
     from services.conversation_service import create_conversation
 

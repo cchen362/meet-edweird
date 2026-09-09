@@ -1,7 +1,7 @@
 """
 Skills service for managing Edward's integrations.
 
-Manages skills (WhatsApp bridge, search, code execution, etc.) with their
+Manages skills (WhatsApp bridge, web search, push notifications) with their
 connection status, enabled state, and hot-reload capability.
 """
 
@@ -25,40 +25,10 @@ SKILL_DEFINITIONS = {
         "description": "Search the web using Brave Search API",
         "get_status": lambda: _get_brave_search_status(),
     },
-    "code_interpreter": {
-        "name": "Code Interpreter",
-        "description": "Execute Python code in a sandboxed environment",
-        "get_status": lambda: _get_code_interpreter_status(),
-    },
-    "javascript_interpreter": {
-        "name": "JavaScript Interpreter",
-        "description": "Execute JavaScript code using Node.js",
-        "get_status": lambda: _get_javascript_interpreter_status(),
-    },
-    "sql_interpreter": {
-        "name": "SQL Database",
-        "description": "Execute SQL queries against a per-conversation SQLite database",
-        "get_status": lambda: _get_sql_interpreter_status(),
-    },
-    "shell_interpreter": {
-        "name": "Shell/Bash",
-        "description": "Execute shell commands in a sandboxed environment",
-        "get_status": lambda: _get_shell_interpreter_status(),
-    },
     "push_notifications": {
         "name": "Push Notifications",
         "description": "Send push notifications to user's devices (PWA)",
         "get_status": lambda: _get_push_notifications_status(),
-    },
-    "orchestrator": {
-        "name": "Orchestrator",
-        "description": "Spawn parallel worker agents for complex multi-step tasks",
-        "get_status": lambda: {"status": "connected", "status_message": "Ready"},
-    },
-    "notebooklm": {
-        "name": "Google NotebookLM",
-        "description": "Build knowledge bases, query sources, and generate artifacts",
-        "get_status": lambda: _get_notebooklm_status(),
     },
 }
 
@@ -79,39 +49,9 @@ def _get_brave_search_status() -> dict:
     return get_status()
 
 
-def _get_code_interpreter_status() -> dict:
-    """Get status from code execution service."""
-    from services.code_execution_service import get_status
-    return get_status()
-
-
-def _get_javascript_interpreter_status() -> dict:
-    """Get status from JavaScript execution service."""
-    from services.execution.javascript_execution import get_status
-    return get_status()
-
-
-def _get_sql_interpreter_status() -> dict:
-    """Get status from SQL execution service."""
-    from services.execution.sql_execution import get_status
-    return get_status()
-
-
-def _get_shell_interpreter_status() -> dict:
-    """Get status from shell execution service."""
-    from services.execution.shell_execution import get_status
-    return get_status()
-
-
 def _get_push_notifications_status() -> dict:
     """Get status from push notification service."""
     from services.push_service import get_status
-    return get_status()
-
-
-def _get_notebooklm_status() -> dict:
-    """Get status from NotebookLM service."""
-    from services.notebooklm_service import get_status
     return get_status()
 
 
@@ -248,13 +188,6 @@ async def set_skill_enabled(skill_id: str, enabled: bool) -> Optional[Skill]:
         except Exception as e:
             print(f"Failed to initialize WhatsApp bridge: {e}")
 
-    if skill_id == "notebooklm" and enabled:
-        try:
-            from services.notebooklm_service import initialize_notebooklm
-            await initialize_notebooklm()
-        except Exception as e:
-            print(f"Failed to initialize NotebookLM client: {e}")
-
     # Refresh tool registry to pick up skill state change
     try:
         from services.tool_registry import refresh_registry
@@ -285,13 +218,6 @@ async def reload_skills() -> List[Skill]:
         await initialize_bridge()
     except Exception as e:
         print(f"Failed to reload WhatsApp bridge: {e}")
-
-    try:
-        from services.notebooklm_service import shutdown_notebooklm, initialize_notebooklm
-        await shutdown_notebooklm()
-        await initialize_notebooklm()
-    except Exception as e:
-        print(f"Failed to reload NotebookLM client: {e}")
 
     # Refresh tool registry to pick up changes
     try:

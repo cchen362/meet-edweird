@@ -5,7 +5,7 @@ import uuid
 import base64
 
 from models import ChatRequest
-from services.graph import stream_with_memory, stream_with_memory_events, chat_with_memory, EventType
+from services.graph import stream_with_memory_events, chat_with_memory, EventType
 from services.settings_service import get_settings
 from services.conversation_service import (
     create_conversation,

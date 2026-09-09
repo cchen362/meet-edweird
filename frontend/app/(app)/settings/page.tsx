@@ -10,8 +10,6 @@ import {
   FileText,
   Calendar,
   ArrowLeft,
-  Dna,
-  GitBranch,
   LucideIcon,
 } from "lucide-react";
 import { GeneralPanel } from "@/components/settings/GeneralPanel";
@@ -21,8 +19,6 @@ import { SkillsPanel } from "@/components/settings/SkillsPanel";
 import { CustomMCPPanel } from "@/components/settings/CustomMCPPanel";
 import { EventsBrowser } from "@/components/settings/EventsBrowser";
 import { HeartbeatPanel } from "@/components/settings/HeartbeatPanel";
-import { EvolutionPanel } from "@/components/settings/EvolutionPanel";
-import { OrchestratorPanel } from "@/components/settings/OrchestratorPanel";
 
 interface TileConfig {
   id: string;
@@ -39,8 +35,6 @@ const TILES: TileConfig[] = [
   { id: "memories", title: "Memories", description: "Search long-term memory", icon: Brain },
   { id: "documents", title: "Documents", description: "Store and search documents", icon: FileText },
   { id: "events", title: "Events", description: "Scheduled reminders and tasks", icon: Calendar },
-  { id: "evolution", title: "Evolution", description: "Self-coding and auto-deployment", icon: Dna },
-  { id: "orchestrator", title: "Orchestrator", description: "Manage parallel worker agents", icon: GitBranch },
 ];
 
 function renderPanel(id: string) {
@@ -52,8 +46,6 @@ function renderPanel(id: string) {
     case "memories": return <MemoryBrowser isExpanded hideHeader />;
     case "documents": return <DocumentBrowser isExpanded hideHeader />;
     case "events": return <EventsBrowser isExpanded hideHeader />;
-    case "evolution": return <EvolutionPanel isExpanded hideHeader />;
-    case "orchestrator": return <OrchestratorPanel isExpanded hideHeader />;
     default: return null;
   }
 }

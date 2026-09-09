@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, X, ChevronRight, Bot, Mic, Search, Loader2, GitBranch } from "lucide-react";
+import { Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, X, ChevronRight, Bot, Mic, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/lib/ChatContext";
 import { Conversation } from "@/lib/api";
@@ -60,13 +60,10 @@ function ConversationItem({
   onSelect: () => void;
   onDelete: () => void;
 }) {
-  // Icon priority: Mic (voice) > Worker (orchestrator) > Bot (scheduled) > MessageSquare (default)
+  // Icon priority: Mic (voice) > Bot (scheduled) > MessageSquare (default)
   const getIcon = () => {
     if (conversation.channel === "voice") {
       return <Mic className="w-4 h-4 flex-shrink-0 text-blue-400" />;
-    }
-    if (conversation.source === "orchestrator_worker") {
-      return <GitBranch className="w-4 h-4 flex-shrink-0 text-purple-400" />;
     }
     if (conversation.source === "scheduled_event" || conversation.source === "heartbeat") {
       return <Bot className="w-4 h-4 flex-shrink-0 text-terminal/70" />;
@@ -283,7 +280,6 @@ const SOURCE_FILTERS = [
   { value: "heartbeat", label: "Heartbeat" },
   { value: "scheduled_event", label: "Scheduled" },
   { value: "external_message", label: "Inbound" },
-  { value: "orchestrator_worker", label: "Workers" },
 ] as const;
 
 function SourceFilterBar({
