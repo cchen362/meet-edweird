@@ -1,6 +1,6 @@
 # Plan 001: Revival — Rebuild Edward In Place
 
-**Status: Approved 2026-09-09. M1, M2, M4, M3, M5 complete (M4 was pulled ahead of M3 on 2026-09-09 because the Codex endpoint stopped serving `gpt-5.4` and chat was silently falling back to the metered API key). M6 next.**
+**Status: M1–M5 complete; M6 in progress 2026-09-09 — documentation rewritten, verification and owner confirmation in progress; merge and branch cleanup pending. M4 was pulled ahead of M3 because the Codex endpoint stopped serving `gpt-5.4` and chat was silently falling back to the metered API key.**
 
 Supersedes the `IMPLEMENTATION_PLANS/` sequence (000–014) and `docs/superpowers/`. Those trees are frozen as archive; nothing in them is authoritative once this plan is approved.
 
@@ -58,7 +58,7 @@ WhatsApp (Baileys bridge, Node) ──webhook─┘      │
                                                            web search · WhatsApp · GitHub MCP · custom MCP
 ```
 
-Startup order after cleanup: `init_db` → checkpoint store → skills → custom MCP servers (GitHub) → WhatsApp bridge → tool registry → scheduler → WhatsApp heartbeat → done. Ten hooks become six.
+Actual startup order, corrected in M6 from `backend/main.py`: `init_db` → `ensure_chat_model_at_startup` → `init_skills` → `initialize_bridge` → `initialize_custom_servers` → `initialize_registry` → `start_scheduler` → `start_heartbeat`. The Anthropic credential check precedes these calls; the checkpoint store has no startup hook.
 
 ## Keep list
 
@@ -174,10 +174,18 @@ Status: **complete 2026-09-09** — backend booted twice with zero tracebacks in
 - The in-app browser pane logs `[SW] Registration failed` on every load; `/sw.js` serves 200 from the dev server, so this is the pane's sandbox and unrelated to M5. Service-worker registration on a real phone is Plan 002's concern.
 
 ### M6 — Docs and verification
-Status: pending
-- `docs/ENGINEERING.md` architecture section rewritten against the real post-cleanup code. CLAUDE.md / AGENTS.md are pointers only.
-- Browser verification on desktop and at 375px: login, chat with streaming, memory browser, events browser, WhatsApp send via tool, GitHub MCP query, web search.
-- Commit. Merge `feat/prompt-caching` into `main`; delete the seven stale feature branches.
+Status: **in progress 2026-09-09 — owner confirmation, merge and branch cleanup pending.**
+- **Documentation.** Rewrote all nine Current Architecture subsections in `docs/ENGINEERING.md` from live source: lifespan order, Codex OAuth and Haiku tiers, direct chat loop and collected-content SSE, conversation storage, split tool modules and actual gates, full-text/vector memory retrieval, WhatsApp-only heartbeat, PWA reach and Windows entry points. Fixed obsolete paths throughout the guide, corrected database-backed OAuth token storage and activity-label ownership. The Target architecture startup sentence above now matches the code. CLAUDE.md / AGENTS.md and the legacy spec remain untouched.
+- **README.** Reframed Edward as a companion with memory and light ops; updated tagline, feature list, architecture, surviving skills, clone URL and Next.js badge; removed the deleted-site links and obsolete feature claims. Existing media is explicitly historical. Push delivery and disconnect-safe turns remain future work, not shipped claims. `.env.example` is unchanged.
+- **Design marker.** Stamped D-001-6 at the top of the CSS root block with the reason for preserving legacy tokens; updated only its pointer row in `docs/DECISIONS.md`. No token, font, layout or application behaviour changed.
+- **Local verification.** `npm.cmd run lint` passed without warnings or errors; `npm.cmd run build` passed (outdated Browserslist dataset warning only). Every backtick file path and local link in ENGINEERING and README resolves. Backend restart outside the sandbox reached application startup complete and bound port 8000 with zero tracebacks in the fresh `%TEMP%\edward-backend-err.log`. The first sandboxed restart could not inspect ports, launched a duplicate and failed binding; that failed attempt is not counted as a passing restart.
+- **Owner verification reported in this session (verbatim):** "I've logged in". Remaining browser results are not yet confirmed by the owner.
+- **Browser verification by this session.** Owner signed in to the in-app browser; a desktop chat displayed retrieval progress, tool activity, content and completion. Web search returned the official PostgreSQL site. Conversation `541f2f1a-f5af-40cd-88fa-be5b0df78079` persisted with nine message entries and tool-call metadata; memory extraction logged three stores (including updates), with two new entries visible in Chrome's memory browser. Chrome rendered all seven Settings tiles, Memories (229 entries at that check) and Events (no pending events) at desktop and a measured 375 CSS pixels with no horizontal page overflow. The production build disrupted dev chunks; the frontend was restarted with `restart.ps1 frontend`, and Chrome was used after the in-app pane remained blank on Settings. Generated public assets are excluded from the commit.
+- **Observed, not fixed.** GitHub MCP `github_get_file_contents` returned `401 Bad credentials`; the query did not succeed. `whatsapp_send_message` to the owner's own chat returned `503 Service Unavailable`; delivery is unconfirmed. Owner authorised that recipient with "You can send it to me". No credentials, bridge behaviour or application code were changed to address either result. GitHub credential repair and WhatsApp/Plan 003 follow-up require separate work.
+- **Mobile chat.** A separate no-tool turn in Chrome at a measured 375 CSS pixels showed Thinking, returned "M6 mobile UI check: message received, no tools used.", and restored the composer. The reply and composer fit with no horizontal page overflow. Mobile login and successful tool round trips at that width were not verified; no repeat sends or credential retries were made after the desktop failures.
+- **Owner checklist before merge:** report results at desktop and 375px for login, chat with streaming, Memories, Events, WhatsApp send via tool, GitHub MCP query and web search. The successful GitHub and WhatsApp round trips remain unverified; owner confirmation is required before merging, including disposition of these observed failures. Record the owner's results verbatim here.
+- **Branch disposition (owner-verified handoff, 2026-09-09; not re-derived).** `main` was a strict ancestor of `feat/prompt-caching` at `60f9a55` (36 ahead, 0 behind). Five stale branches have no unique commits: `cl-feature`, `feat/autonomy-framework`, `feat/cross-platform`, `feat/direct-sdk`, `feat/notebooklm-integration`. Explicitly **discard** the one unmerged commit on each of `feat/prompt-caching-standalone` ("add Anthropic prompt caching across all LLM call sites", 2026-03-04) and `fix/orchestrator-error-none` (orchestrator fix, 2026-03-04): they touch code deleted or superseded by this plan and will not be cherry-picked.
+- **Git completion pending.** Commit docs and marker on `feat/prompt-caching` first. After owner confirmation, fast-forward `main`, push only to `origin`, then delete all seven stale branches locally and the five origin copies (all except `cl-feature` and `feat/direct-sdk`). Keep `feat/prompt-caching`; never push to `upstream`. Set the header to **Plan complete** only when verification and the authorised git work have finished.
 
 ## Out of scope (own plans)
 

@@ -5,30 +5,31 @@
 <h1 align="center">Edward</h1>
 
 <p align="center">
-  <strong>Your AI assistant that remembers everything.</strong>
+  <strong>A personal companion who remembers you.</strong>
 </p>
 
 <p align="center">
-  Long-term memory &nbsp;·&nbsp; Multi-agent orchestration &nbsp;·&nbsp; Self-evolution &nbsp;·&nbsp; Code execution
+  Long-term memory &nbsp;·&nbsp; Light ops &nbsp;·&nbsp; WhatsApp &nbsp;·&nbsp; Phone PWA
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 License" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2011-blue.svg" alt="Windows 11" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/Next.js-15-black.svg" alt="Next.js" />
+  <img src="https://img.shields.io/badge/Next.js-14-black.svg" alt="Next.js" />
 </p>
 
 <p align="center">
-  <a href="https://meet-edward.com">Website</a> &nbsp;·&nbsp;
-  <a href="https://meet-edward.com/docs">Docs</a> &nbsp;·&nbsp;
+  <a href="docs/ENGINEERING.md">Engineering guide</a> &nbsp;·&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;·&nbsp;
-  <a href="https://youtu.be/uewYlQma1QY">Video Walkthrough</a>
+  <a href="https://youtu.be/uewYlQma1QY">Historical Walkthrough</a>
 </p>
 
 ---
 
 ## Demo
+
+The upstream walkthrough below predates the September 2026 cleanup and includes features that have since been removed.
 
 <p align="center">
   <a href="https://youtu.be/uewYlQma1QY">
@@ -37,6 +38,8 @@
 </p>
 
 ## Screenshots
+
+These are historical screenshots, not verification of the current interface. The current feature list is below.
 
 <p align="center">
   <img src="docs/screenshots/chat-welcome-desktop.png" width="700" alt="Edward chat interface" />
@@ -59,44 +62,51 @@
 
 ## What is Edward?
 
-Edward is a full-stack AI assistant built on **Next.js**, **FastAPI**, and **PostgreSQL with pgvector**. He extracts memories from every conversation, schedules his own reminders, sends messages over WhatsApp, and runs code — reached from a phone PWA, a desktop browser, and WhatsApp.
+Edward is a single-user personal companion with long-term memory, reached from a phone PWA, a desktop browser and WhatsApp. He recalls past conversations, keeps notes, schedules reminders, looks things up and answers GitHub questions through MCP.
 
-Unlike chat wrappers, Edward has persistent memory, background autonomy, a multi-agent orchestrator that spawns worker agents for parallel tasks, and a self-evolution engine that lets him propose, test, and deploy improvements to his own codebase.
+Chat uses **GPT via Codex OAuth** and the owner's ChatGPT subscription. **Claude Haiku 4.5** handles background intelligence such as memory extraction, reflection and WhatsApp triage. The app runs on Windows with Next.js, FastAPI and PostgreSQL with pgvector. Cleanup and verification progress are recorded in [Plan 001](docs/plans/001_REVIVAL_CLEANUP.md).
 
 ## Features
 
-| | | | |
-|:--|:--|:--|:--|
-| 🧠 **Long-Term Memory** | Hybrid vector + keyword recall | 📅 **Scheduled Events** | One-time & cron recurring |
-| 💬 **WhatsApp** | Send/receive via a Baileys bridge | 🐍 **Code Execution** | Python, JS, SQL, Shell sandboxes |
-| 🔍 **Web Search** | Brave Search + page extraction | 📄 **Document Store** | Semantic search over saved docs |
-| 🔌 **Custom MCP Servers** | Self-serve install at runtime | 🤖 **Multi-Agent Orchestrator** | Spawns parallel worker agents |
-| 🧬 **Self-Evolution** | Proposes, tests, and deploys its own upgrades | 🔔 **Push Notifications** | Web Push via VAPID |
+| Feature | What it does |
+|:--|:--|
+| Long-term memory | Extracts useful memories and recalls them through vector and keyword search |
+| Documents | Saves notes and retrieves relevant documents |
+| Scheduled events | One-time reminders and cron-based recurring check-ins |
+| WhatsApp | Reads and sends through the Baileys bridge; inbound mentions default to @edward |
+| Web search | Brave Search and page extraction |
+| GitHub and custom MCP | Connects running MCP servers and exposes their tools in chat |
+| Phone PWA | Browser-based access with a chat activity feed |
+
+Web Push support remains in the app, but delivery is currently broken and awaits the separate Plan 002 fix. Chat turns are still tied to the open connection; returning to a completed answer after disconnect is future Plan 006 work.
 
 ## Quick Start
 
 ```powershell
-git clone https://github.com/ben4mn/meet-edward.git; cd meet-edward
+git clone https://github.com/cchen362/meet-edweird.git
+cd meet-edweird
 .\setup.ps1                    # Installs Python & Node deps, starts PostgreSQL in Docker
 .\restart.ps1                  # Starts backend (:8000) + frontend (:3001)
 ```
 
-Add your Anthropic API key to `.env` — that's the only required variable. Open [localhost:3001](http://localhost:3001) and set a password on first visit.
+Add your Anthropic API key to `.env` before starting the backend — that's the only required environment variable. Open [localhost:3001](http://localhost:3001), set a password on first visit, and sign in to Codex OAuth from Settings for chat. The Anthropic key pays only for Haiku background calls; chat requires the OAuth connection.
 
 > **Prerequisites:** Windows 11, PowerShell, Docker (PostgreSQL with pgvector runs in the `edward-pg` container), Node.js 18+, Python 3.11+, [Anthropic API key](https://console.anthropic.com/)
 
 ## Architecture
 
 ```
-Frontend (Next.js :3001)  →  Backend (FastAPI :8000)  →  PostgreSQL (:5432, Docker)
-                                      ↓
-                              Chat turn loop
-                           (retrieve memory →
-                            LLM call → tools →
-                            stream → extract memory)
-                                      ↓
-                     Codex OAuth (chat) · Claude Haiku (background)
+Phone PWA / Desktop browser ──HTTP + SSE──> FastAPI (:8000) ──> PostgreSQL + pgvector
+       Next.js (:3001)                         │                  Docker (:5432)
+WhatsApp (Node / Baileys) ─────webhook───────────┤
+                                              ├─ GPT via Codex OAuth: chat + tools
+                                              ├─ Claude Haiku 4.5: background intelligence
+                                              └─ Local sentence-transformers: embeddings
 ```
+
+Each chat turn loads conversation state, retrieves memories and document references, calls GPT and runs any requested tools. The browser receives activity and content over SSE; the backend saves messages before the completion event and starts post-turn memory work. Provider text is collected before it is emitted to the browser.
+
+The runtime is in `backend/services/graph/streaming.py`, with prompt assembly, events, message conversion, provider calls and tool execution in neighbouring modules. Tools live in `backend/services/graph/tools/`, `backend/services/whatsapp_bridge_tools.py` and `backend/services/custom_mcp_tools.py`. See the [engineering guide](docs/ENGINEERING.md#current-architecture) for startup order, tool gates and data ownership.
 
 <details>
 <summary><strong>Background Systems</strong></summary>
@@ -106,7 +116,6 @@ Frontend (Next.js :3001)  →  Backend (FastAPI :8000)  →  PostgreSQL (:5432, 
 | Heartbeat | Monitors WhatsApp; triages by urgency |
 | Memory Reflection | Post-turn enrichment via related memory queries |
 | Deep Retrieval | Pre-turn multi-query search for complex conversations |
-| Memory Consolidation | Hourly clustering of related memories |
 | Search Tags | Auto-generated keywords for conversation search |
 
 </details>
@@ -121,9 +130,10 @@ Copy [`.env.example`](.env.example) to `.env` and configure:
 | `ANTHROPIC_API_KEY` | Yes | Claude Haiku key for background jobs |
 | `BRAVE_SEARCH_API_KEY` | No | Enables web search |
 | `MCP_WHATSAPP_ENABLED` | No | WhatsApp via the Baileys bridge |
-| `VAPID_PUBLIC_KEY` / `PRIVATE_KEY` | No | Browser push notifications |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | No | Web Push configuration; delivery fix pending |
 | `JWT_SECRET_KEY` | No | Auth secret (auto-generates if unset) |
 | `GITHUB_TOKEN` | No | MCP server search via GitHub API |
+| `GITHUB_MCP_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` | No | Matching PAT values for the configured GitHub MCP binary |
 
 See [`.env.example`](.env.example) for the full list.
 
@@ -136,15 +146,11 @@ Each skill is toggled from the settings page. Tools are dynamically bound to the
 
 | Skill | Description |
 |-------|-------------|
-| Code Interpreter | Sandboxed Python with numpy/pandas/matplotlib |
-| JavaScript Interpreter | Node.js sandbox |
-| SQL Database | Per-conversation SQLite + persistent PostgreSQL schemas |
-| Shell/Bash | Sandboxed shell commands |
 | Brave Search | Web search + page extraction |
 | WhatsApp MCP | WhatsApp via the Baileys bridge |
-| Scheduled Events | Reminders, messages, and recurring tasks |
+| Push Notifications | VAPID-backed Web Push; delivery fix pending |
 
-Memory, documents, scheduled events, push notifications, and contacts are always available.
+Memory, documents, scheduled events, heartbeat review and custom-server management tools are always bound. Push additionally needs VAPID configuration, WhatsApp needs an available bridge, and custom MCP tools come from running servers. Settings contains General, Skills, Edward's Servers, Heartbeat, Memories, Documents and Events.
 
 </details>
 
@@ -159,7 +165,7 @@ Memory, documents, scheduled events, push notifications, and contacts are always
 
 ## Contributing
 
-Contributions welcome — open an issue first to discuss what you'd like to change. Fork, branch, and open a PR. See the [docs site](https://meet-edward.com/docs) for architecture details.
+Open an issue first to discuss what you'd like to change. Read the [engineering guide](docs/ENGINEERING.md) and [settled decisions](docs/DECISIONS.md) before implementing changes, then fork, branch and open a PR.
 
 ## License
 

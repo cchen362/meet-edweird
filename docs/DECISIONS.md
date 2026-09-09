@@ -20,7 +20,7 @@ One line each. The code marker is authoritative; follow the pointer for the reas
 | D-001-2 | Chat provider is GPT via Codex OAuth only; the Anthropic SDK is used solely for Haiku background calls. | `backend/services/graph/codex.py` (stamped 2026-09-09, M4; moved from `streaming.py` in M3) |
 | D-001-3 | Background jobs stay on Claude Haiku 4.5. | `backend/services/llm_client.py` (stamped 2026-09-09, M4) |
 | D-001-4 | Edward does not spawn workers, self-code, or execute code. | `backend/services/tool_registry.py` (stamped 2026-09-09, M3) |
-| D-001-6 | No design commitment exists; chosen visually from mockups in Plan 004. No restyling before then. | `frontend/app/globals.css` (stamped in M6) |
+| D-001-6 | No design commitment exists; chosen visually from mockups in Plan 004. No restyling before then. | `frontend/app/globals.css` (stamped 2026-09-09, M6) |
 
 ## Superseded or hollowed-out — do not re-stamp
 

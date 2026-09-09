@@ -4,6 +4,7 @@
 
 /* Light theme (default in :root, overridden by .dark) */
 :root {
+  /* D-001-6: No design commitment; preserve these legacy tokens until the owner chooses rendered mockups in Plan 004. */
   --primary-bg: #ffffff;
   --surface: #f1f5f9;
   --text-primary: #0f172a;
