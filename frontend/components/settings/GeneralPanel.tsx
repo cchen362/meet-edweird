@@ -118,7 +118,6 @@ export function GeneralPanel({ isExpanded, hideHeader }: GeneralPanelProps) {
     try {
       await logoutCodex();
       setOpenaiStatus({
-        has_api_key: openaiStatus?.has_api_key ?? false,
         codex_connected: false,
         codex_email: null,
       });
@@ -129,12 +128,6 @@ export function GeneralPanel({ isExpanded, hideHeader }: GeneralPanelProps) {
       console.error("Failed to logout:", e);
     }
   };
-
-  // Group models by provider
-  const anthropicModels = models.filter(
-    (m) => m.provider === "anthropic" || !m.provider
-  );
-  const openaiModels = models.filter((m) => m.provider === "openai");
 
   if (loading) {
     return (
@@ -164,24 +157,11 @@ export function GeneralPanel({ isExpanded, hideHeader }: GeneralPanelProps) {
           disabled={saving}
           className="w-full bg-surface border border-input-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-terminal/50 transition-colors disabled:opacity-50"
         >
-          <optgroup label="Anthropic">
-            {anthropicModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-                {m.recommended ? " (Recommended)" : ""}
-              </option>
-            ))}
-          </optgroup>
-          {openaiModels.length > 0 && (
-            <optgroup label="OpenAI">
-              {openaiModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.recommended ? " (Recommended)" : ""}
-                </option>
-              ))}
-            </optgroup>
-          )}
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
         </select>
         {saving && (
           <p className="text-xs text-text-muted mt-1">Saving...</p>
@@ -232,36 +212,11 @@ export function GeneralPanel({ isExpanded, hideHeader }: GeneralPanelProps) {
               <LogOut className="w-3 h-3" /> Disconnect
             </button>
           </div>
-        ) : openaiStatus?.has_api_key ? (
-          <div className="space-y-3">
-            <div className="p-3 rounded-lg bg-blue-400/10 border border-blue-400/20">
-              <div className="text-sm text-text-primary">
-                Connected via API Key
-              </div>
-              <div className="text-xs text-text-muted mt-1">
-                Using OPENAI_API_KEY environment variable (pay-per-token)
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleCodexLogin}
-                disabled={loginLoading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-input-border hover:border-terminal/50 text-xs text-text-muted transition-colors disabled:opacity-50"
-              >
-                {loginLoading ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <ExternalLink className="w-3 h-3" />
-                )}
-                Upgrade to subscription credits
-              </button>
-            </div>
-          </div>
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-text-muted">
-              Sign in with your ChatGPT Plus/Pro account to use GPT-5.4 on
-              subscription credits, or set OPENAI_API_KEY in your .env file.
+              Chat runs on your ChatGPT subscription via Codex. Sign in to
+              use it — until then, chat is unavailable.
             </p>
             <button
               onClick={handleCodexLogin}

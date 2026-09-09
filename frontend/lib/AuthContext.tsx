@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { getAuthStatus, login as apiLogin, setupPassword as apiSetup, logout as apiLogout } from "./api";
 
 interface AuthContextType {
@@ -28,18 +28,27 @@ function hasAuthHint(): boolean {
   }
 }
 
+const subscribeNoop = () => () => {};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Optimistic: if we have the hint, assume authenticated until proven otherwise
-  const hint = hasAuthHint();
-  const [isAuthenticated, setIsAuthenticated] = useState(hint);
-  const [isLoading, setIsLoading] = useState(!hint); // Skip loading if hint exists
+  // Optimistic: if we have the hint, assume authenticated until proven otherwise.
+  // useSyncExternalStore (not useState(hasAuthHint())) so the server render and the
+  // client's first render both see the `false` snapshot — hasAuthHint() reads
+  // localStorage, which doesn't exist on the server, so seeding useState directly
+  // from it made server and client markup diverge and React flagged a hydration
+  // mismatch. The real client value is applied by React right after hydration.
+  const hint = useSyncExternalStore(subscribeNoop, hasAuthHint, () => false);
+  const [verified, setVerified] = useState<boolean | null>(null); // null until /auth/status answers
   const [needsSetup, setNeedsSetup] = useState(false);
+
+  const isAuthenticated = verified ?? hint;
+  const isLoading = verified === null && !hint;
 
   const checkAuth = useCallback(async () => {
     try {
       const status = await getAuthStatus();
       setNeedsSetup(!status.configured);
-      setIsAuthenticated(status.authenticated);
+      setVerified(status.authenticated);
       // Update hint
       try {
         if (status.authenticated) {
@@ -49,10 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch { /* localStorage unavailable */ }
     } catch {
-      setIsAuthenticated(false);
+      setVerified(false);
       try { localStorage.removeItem("edward_auth_hint"); } catch {}
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -62,21 +69,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (password: string) => {
     await apiLogin(password);
-    setIsAuthenticated(true);
+    setVerified(true);
     setNeedsSetup(false);
     try { localStorage.setItem("edward_auth_hint", "1"); } catch {}
   };
 
   const setup = async (password: string) => {
     await apiSetup(password);
-    setIsAuthenticated(true);
+    setVerified(true);
     setNeedsSetup(false);
     try { localStorage.setItem("edward_auth_hint", "1"); } catch {}
   };
 
   const logout = async () => {
     await apiLogout();
-    setIsAuthenticated(false);
+    setVerified(false);
     try { localStorage.removeItem("edward_auth_hint"); } catch {}
   };
 

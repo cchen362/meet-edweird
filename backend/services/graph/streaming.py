@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import hashlib
 import json as _json
 import re
@@ -7,64 +6,16 @@ import time
 from datetime import datetime
 from typing import AsyncGenerator, List, Any, Dict, Optional
 
-import os
-
-import anthropic
 import httpx
 
 from services.tool_registry import get_available_tools, get_tool_descriptions
-from services.graph.tool_schema import tools_to_anthropic_schemas, tools_to_openai_schemas
+from services.graph.tool_schema import tools_to_openai_schemas
 
 # Context budget constants
 MAX_NORMAL_MEMORIES = 5
 MAX_ENRICHED_MEMORIES = 5
 MAX_DOCUMENTS = 3
 MAX_MEMORY_CONTEXT_CHARS = 8000
-
-# Models that support the effort parameter (Claude 4.6+)
-_EFFORT_MODELS = {"claude-sonnet-4-6", "claude-opus-4-6"}
-
-# Check if the installed Anthropic SDK accepts the effort parameter
-_EFFORT_SUPPORTED = False
-try:
-    import inspect as _inspect
-    _EFFORT_SUPPORTED = "effort" in _inspect.signature(
-        anthropic.resources.messages.Messages.create
-    ).parameters
-except Exception:
-    pass
-
-# Singleton Anthropic client (shared with llm_client.py via same env key)
-_client: Optional[anthropic.AsyncAnthropic] = None
-
-
-def _get_client() -> anthropic.AsyncAnthropic:
-    """Get or create the singleton Anthropic client."""
-    global _client
-    if _client is None:
-        _client = anthropic.AsyncAnthropic()
-    return _client
-
-
-# Lazy-loaded OpenAI client (only created when an OpenAI model is selected)
-_openai_client = None
-
-
-def _get_openai_client():
-    """Get or create the singleton OpenAI client. Lazy-imports openai package."""
-    global _openai_client
-    if _openai_client is None:
-        try:
-            from openai import AsyncOpenAI
-            _openai_client = AsyncOpenAI()
-        except ImportError:
-            raise ImportError("openai package not installed. Run: pip install openai>=1.60.0")
-    return _openai_client
-
-
-def _is_openai_model(model: str) -> bool:
-    """Check if a model ID belongs to OpenAI based on prefix."""
-    return model.startswith(("gpt-", "o1-", "o3-", "o4-"))
 
 
 EDWARD_CHARACTER = """
@@ -572,72 +523,6 @@ def _build_human_message(message: str, attachments: Optional[List[dict]] = None)
     return {"role": "user", "content": content_blocks}
 
 
-def _add_cache_breakpoints(messages: list) -> list:
-    """Add cache_control breakpoints to message list for Anthropic prompt caching.
-
-    Creates a deep copy with cache_control on the second-to-last user message's
-    last content block. Does NOT mutate the stored messages.
-    """
-    if len(messages) < 2:
-        return messages
-
-    # Find the second-to-last message (cache breakpoint)
-    cached_messages = copy.deepcopy(messages)
-    target = cached_messages[-2]
-    content = target.get("content")
-
-    if isinstance(content, str):
-        # Convert to block format to add cache_control
-        target["content"] = [
-            {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
-        ]
-    elif isinstance(content, list) and content:
-        # Add cache_control to the last block
-        content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
-
-    return cached_messages
-
-
-def _extract_text_from_response(response) -> str:
-    """Extract text content from an Anthropic API response."""
-    parts = []
-    for block in response.content:
-        if block.type == "text":
-            parts.append(block.text)
-    return "".join(parts)
-
-
-def _extract_tool_calls(response) -> list[dict]:
-    """Extract tool calls from an Anthropic API response.
-
-    Returns list of dicts with keys: id, name, args
-    """
-    tool_calls = []
-    for block in response.content:
-        if block.type == "tool_use":
-            tool_calls.append({
-                "id": block.id,
-                "name": block.name,
-                "args": block.input,
-            })
-    return tool_calls
-
-
-def _response_to_assistant_message(response) -> dict:
-    """Convert an Anthropic API response to an assistant message dict."""
-    content_blocks = []
-    for block in response.content:
-        if block.type == "text":
-            content_blocks.append({"type": "text", "text": block.text})
-        elif block.type == "tool_use":
-            content_blocks.append({
-                "type": "tool_use",
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-            })
-    return {"role": "assistant", "content": content_blocks}
-
 
 def _make_tool_result_message(tool_call_id: str, content: str) -> dict:
     """Create a tool_result message in Anthropic's format."""
@@ -673,43 +558,6 @@ def _msg_content_text(m) -> str:
                 parts.append(str(block))
         return "".join(parts)
     return str(content)
-
-
-def _build_api_kwargs(
-    model: str,
-    static_system: str,
-    dynamic_context: str,
-    messages: list,
-    tool_schemas: list,
-    temperature: float,
-    max_tokens: int = 16384,
-) -> dict:
-    """Build kwargs dict for client.messages.create()."""
-    # System blocks: static (cached) + dynamic
-    system_blocks = [
-        {"type": "text", "text": static_system, "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": dynamic_context},
-    ]
-
-    # Add cache breakpoints to messages (deep copy)
-    cached_messages = _add_cache_breakpoints(messages)
-
-    kwargs = {
-        "model": model,
-        "system": system_blocks,
-        "messages": cached_messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-
-    if tool_schemas:
-        kwargs["tools"] = tool_schemas
-
-    # Effort parameter for Claude 4.6+ models
-    if _EFFORT_SUPPORTED and model in _EFFORT_MODELS:
-        kwargs["effort"] = "high"
-
-    return kwargs
 
 
 # ===== OPENAI MESSAGE FORMAT CONVERSION =====
@@ -810,129 +658,6 @@ def _anthropic_messages_to_openai_input(messages: list) -> list:
     return input_items
 
 
-def _extract_text_from_openai_response(response) -> str:
-    """Extract text content from an OpenAI Responses API response object."""
-    parts = []
-    for item in response.output:
-        if item.type == "message":
-            for content_block in item.content:
-                if content_block.type == "output_text":
-                    parts.append(content_block.text)
-    return "".join(parts)
-
-
-def _extract_tool_calls_from_openai(response) -> list[dict]:
-    """Extract tool calls from an OpenAI Responses API response.
-
-    Returns normalized list matching Anthropic format: [{id, name, args}]
-    """
-    tool_calls = []
-    for item in response.output:
-        if item.type == "function_call":
-            args = item.arguments
-            if isinstance(args, str):
-                try:
-                    args = _json.loads(args)
-                except _json.JSONDecodeError:
-                    args = {}
-            tool_calls.append({
-                "id": item.call_id,
-                "name": item.name,
-                "args": args,
-            })
-    return tool_calls
-
-
-def _openai_response_to_assistant_message(response) -> dict:
-    """Convert OpenAI response to Anthropic-native assistant message dict for storage."""
-    content_blocks = []
-    for item in response.output:
-        if item.type == "message":
-            for content_block in item.content:
-                if content_block.type == "output_text":
-                    content_blocks.append({"type": "text", "text": content_block.text})
-        elif item.type == "function_call":
-            args = item.arguments
-            if isinstance(args, str):
-                try:
-                    args = _json.loads(args)
-                except _json.JSONDecodeError:
-                    args = {}
-            content_blocks.append({
-                "type": "tool_use",
-                "id": item.call_id,
-                "name": item.name,
-                "input": args,
-            })
-    return {"role": "assistant", "content": content_blocks}
-
-
-# ===== PROVIDER-AWARE LLM CALL FUNCTIONS =====
-
-async def _call_anthropic(
-    model: str,
-    static_system: str,
-    dynamic_context: str,
-    messages: list,
-    tool_schemas: list,
-    temperature: float,
-    max_tokens: int = 16384,
-) -> dict:
-    """Call Anthropic API and return normalized result dict.
-
-    Returns: {text, tool_calls, assistant_message, raw_response}
-    """
-    client = _get_client()
-    api_kwargs = _build_api_kwargs(model, static_system, dynamic_context, messages, tool_schemas, temperature, max_tokens)
-    response = await client.messages.create(**api_kwargs)
-
-    return {
-        "text": _extract_text_from_response(response),
-        "tool_calls": _extract_tool_calls(response),
-        "assistant_message": _response_to_assistant_message(response),
-        "raw_response": response,
-    }
-
-
-async def _call_openai(
-    model: str,
-    static_system: str,
-    dynamic_context: str,
-    messages: list,
-    tool_schemas: list,
-    temperature: float,
-    max_tokens: int = 16384,
-) -> dict:
-    """Call OpenAI Responses API and return normalized result dict.
-
-    Returns same shape as _call_anthropic(): {text, tool_calls, assistant_message, raw_response}
-    The assistant_message is always in Anthropic-native format for checkpoint storage.
-    """
-    client = _get_openai_client()
-
-    instructions = static_system + "\n\n" + dynamic_context
-    input_items = _anthropic_messages_to_openai_input(messages)
-
-    kwargs = {
-        "model": model,
-        "instructions": instructions,
-        "input": input_items,
-        "temperature": temperature,
-        "max_output_tokens": max_tokens,
-    }
-
-    if tool_schemas:
-        kwargs["tools"] = tool_schemas
-
-    response = await client.responses.create(**kwargs)
-
-    return {
-        "text": _extract_text_from_openai_response(response),
-        "tool_calls": _extract_tool_calls_from_openai(response),
-        "assistant_message": _openai_response_to_assistant_message(response),
-        "raw_response": response,
-    }
-
 
 async def _call_codex(
     model: str,
@@ -948,7 +673,7 @@ async def _call_codex(
     Uses chatgpt.com/backend-api/codex/responses endpoint via raw httpx.
     ChatGPT backend REQUIRES stream=true — we collect SSE events and extract
     the full response from the terminal response event.
-    Returns same normalized dict as _call_anthropic() / _call_openai().
+    Returns normalized dict: {text, tool_calls, assistant_message, raw_response}
     """
     from services.codex_oauth_service import get_access_token, get_account_id, CODEX_API_URL
 
@@ -996,7 +721,7 @@ async def _call_codex(
     # Separate timeouts: 30s connect, 90s between chunks (read), 30s write/pool
     # The read timeout resets per chunk — handles slow reasoning without false timeout.
     stream_timeout = httpx.Timeout(connect=30.0, read=90.0, write=30.0, pool=30.0)
-    # Hard cap: 300s total wall-clock time to prevent infinite hangs (GPT-5.4 extended thinking can take 3–4 minutes)
+    # Hard cap: 300s total wall-clock time to prevent infinite hangs (extended thinking can take 3–4 minutes)
     CODEX_TOTAL_TIMEOUT = 300.0
     stream_start = time.monotonic()
     event_counts: Dict[str, int] = {}
@@ -1015,7 +740,7 @@ async def _call_codex(
                 async for chunk in response.aiter_text():
                     body_text += chunk
                 if "usage_limit_reached" in body_text:
-                    raise ValueError("ChatGPT usage limit reached. Try again later or switch to API key.")
+                    raise ValueError("ChatGPT usage limit reached. Try again later.")
                 raise ValueError(f"Codex API returned 404: {body_text[:200]}")
 
             if response.status_code == 401:
@@ -1040,7 +765,7 @@ async def _call_codex(
                 elapsed = time.monotonic() - stream_start
                 if elapsed > CODEX_TOTAL_TIMEOUT:
                     _codex_log_summary(event_counts, elapsed, "TIMEOUT")
-                    raise ValueError(f"Codex API total timeout ({CODEX_TOTAL_TIMEOUT:.0f}s) exceeded. Try again or switch provider.")
+                    raise ValueError(f"Codex API total timeout ({CODEX_TOTAL_TIMEOUT:.0f}s) exceeded. Try again later.")
 
                 buffer += chunk
                 while "\n" in buffer:
@@ -1251,6 +976,7 @@ def _parse_codex_response(data: dict) -> dict:
     }
 
 
+# D-001-2: chat is GPT via Codex OAuth only. No Anthropic chat path, no metered OpenAI API-key fallback — a rejected model must surface as an error, never as silent spend.
 async def _call_llm(
     model: str,
     static_system: str,
@@ -1260,48 +986,19 @@ async def _call_llm(
     temperature: float,
     max_tokens: int = 16384,
 ) -> dict:
-    """Dispatch LLM call to the appropriate provider based on model ID.
+    """Call GPT through the Codex OAuth endpoint (ChatGPT subscription credits).
 
-    OpenAI routing priority:
-    1. Codex OAuth (subscription credits) — if tokens exist
-    2. OPENAI_API_KEY (pay-per-token) — if env var set
-    3. Error — no OpenAI auth configured
+    `model` is resolved against the models the Codex endpoint currently serves
+    before the call is made, so a stale or rejected model id never reaches the
+    API silently — resolve_chat_model() raises if Codex OAuth is not connected.
 
     Returns normalized dict: {text, tool_calls, assistant_message, raw_response}
     """
-    if _is_openai_model(model):
-        # Priority 1: Codex OAuth (subscription credits)
-        codex_failed = False
-        try:
-            from services.codex_oauth_service import has_valid_tokens
-            if await has_valid_tokens():
-                print(f"[LLM] Calling Codex OAuth ({model})")
-                return await _call_codex(model, static_system, dynamic_context, messages, tool_schemas, temperature, max_tokens)
-        except ImportError:
-            pass
-        except (ValueError, Exception) as e:
-            codex_failed = True
-            print(f"[LLM] Codex OAuth failed ({e}), checking API key fallback...")
+    from services.codex_oauth_service import resolve_chat_model
 
-        # Priority 2: API key (pay-per-token)
-        if os.getenv("OPENAI_API_KEY"):
-            if codex_failed:
-                # Notify user that we fell back to pay-per-token
-                try:
-                    from services.push_service import send_push_notification
-                    asyncio.create_task(send_push_notification(
-                        "OpenAI Auth Fallback",
-                        "Codex OAuth failed — using API key (pay-per-token). Re-login in Settings.",
-                    ))
-                except Exception:
-                    pass
-            print(f"[LLM] Calling OpenAI API ({model})")
-            return await _call_openai(model, static_system, dynamic_context, messages, tool_schemas, temperature, max_tokens)
-
-        raise ValueError("No OpenAI auth configured. Set OPENAI_API_KEY or sign in with Codex OAuth in Settings.")
-
-    print(f"[LLM] Calling Anthropic ({model})")
-    return await _call_anthropic(model, static_system, dynamic_context, messages, tool_schemas, temperature, max_tokens)
+    model = await resolve_chat_model(model)
+    print(f"[LLM] Calling Codex OAuth ({model})")
+    return await _call_codex(model, static_system, dynamic_context, messages, tool_schemas, temperature, max_tokens)
 
 
 
@@ -1535,11 +1232,8 @@ async def stream_with_memory_events(
     )
     dynamic_context = memory_context + briefing_context + time_context
 
-    # Build tool schemas in provider-appropriate format
-    if _is_openai_model(model):
-        tool_schemas = tools_to_openai_schemas(tools) if tools else []
-    else:
-        tool_schemas = tools_to_anthropic_schemas(tools) if tools else []
+    # Build tool schemas (OpenAI Responses API format — the only format now needed)
+    tool_schemas = tools_to_openai_schemas(tools) if tools else []
 
     full_response = ""
     tool_calls_made = []
@@ -1752,28 +1446,14 @@ async def stream_with_memory_events(
         else:
             print(f"[WARNING] Tool loop exited after {iteration}/{max_tool_iterations} iterations without final response, streaming new response")
             fallback_static = static_system + "\n\nYou have used all available tool iterations. Summarize what you accomplished and respond to the user. Do not attempt any more tool calls."
-            if _is_openai_model(model):
-                # OpenAI: non-streaming fallback (Responses API streaming is complex)
-                fallback_result = await _call_llm(
-                    model, fallback_static, dynamic_context, messages, [], temperature,
-                )
-                full_response = fallback_result["text"]
-                if full_response:
-                    assistant_content_emitted = True
-                    yield create_event(EventType.CONTENT, conversation_id, content=full_response)
-            else:
-                # Anthropic: streaming fallback
-                client = _get_client()
-                fallback_kwargs = _build_api_kwargs(
-                    model, fallback_static, dynamic_context, messages,
-                    [], temperature,  # No tools for fallback
-                )
-                async with client.messages.stream(**fallback_kwargs) as stream:
-                    async for text in stream.text_stream:
-                        full_response += text
-                        if text:
-                            assistant_content_emitted = True
-                        yield create_event(EventType.CONTENT, conversation_id, content=text)
+            # Non-streaming fallback (Codex Responses API streaming is complex to redo mid-loop)
+            fallback_result = await _call_llm(
+                model, fallback_static, dynamic_context, messages, [], temperature,
+            )
+            full_response = fallback_result["text"]
+            if full_response:
+                assistant_content_emitted = True
+                yield create_event(EventType.CONTENT, conversation_id, content=full_response)
 
     # Safety net: if no content was ever produced, send a plan-aware fallback
     if not full_response.strip():
@@ -1986,11 +1666,8 @@ async def chat_with_memory(
     )
     dynamic_context = memory_context + briefing_context_sync + orchestrator_context + time_context
 
-    # Build tool schemas in provider-appropriate format
-    if _is_openai_model(model):
-        tool_schemas = tools_to_openai_schemas(tools) if tools else []
-    else:
-        tool_schemas = tools_to_anthropic_schemas(tools) if tools else []
+    # Build tool schemas (OpenAI Responses API format — the only format now needed)
+    tool_schemas = tools_to_openai_schemas(tools) if tools else []
 
     full_response = ""
     tool_calls_made = []

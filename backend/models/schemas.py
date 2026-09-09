@@ -26,8 +26,8 @@ class Settings(BaseModel):
         description="The assistant's personality and behavior"
     )
     model: str = Field(
-        default="claude-sonnet-4-6",
-        description="The Claude model to use"
+        default="",
+        description="Chat model id. Must be one the Codex endpoint serves; resolved against the served list at startup and on every call."
     )
     temperature: float = Field(
         default=0.7,
@@ -37,7 +37,7 @@ class Settings(BaseModel):
     )
     system_prompt: str = Field(
         default="You are Edward, a personal AI assistant who learns and grows. Be concise, helpful, and genuine. A tad cheeky when the moment calls for it.",
-        description="The system prompt sent to Claude"
+        description="The system prompt sent to the chat model"
     )
 
 class SettingsUpdate(BaseModel):

@@ -24,7 +24,22 @@ _gov_logger.setLevel(logging.DEBUG)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # D-001-3: Tier 2 background jobs (memory extraction, search tags, reflection,
+    # WhatsApp triage) run on Claude Haiku and have no fallback — fail loudly at
+    # boot rather than let them silently no-op later.
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not set. Tier 2 background jobs (memory extraction, "
+            "search tags, reflection, WhatsApp triage) run on Claude Haiku and need it. "
+            "Add ANTHROPIC_API_KEY to .env."
+        )
+
     await init_db()
+
+    # D-001-2: chat is GPT via Codex OAuth only. Verify OAuth connectivity and
+    # pin settings.model to a model the Codex endpoint currently serves.
+    from services.codex_oauth_service import ensure_chat_model_at_startup
+    await ensure_chat_model_at_startup()
 
     # Initialize skills service (manages MCP and other integrations)
     try:

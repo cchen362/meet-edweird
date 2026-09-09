@@ -15,49 +15,25 @@ import { EdwardAvatar } from "@/components/EdwardAvatar";
 import {
   getSettings,
   getModels,
-  getOpenAIStatus,
   updateSettings,
   Model,
-  OpenAIStatus,
 } from "@/lib/api";
-
-function isOpenAIModel(model: string): boolean {
-  return model.startsWith("gpt-") || model.startsWith("o1-") ||
-    model.startsWith("o3-") || model.startsWith("o4-");
-}
-
-function getShortName(model: Model): string {
-  // Strip "Claude " or common prefixes for a compact display
-  return model.name
-    .replace("Claude ", "")
-    .replace(" (Legacy)", "");
-}
-
-function getAuthLabel(modelId: string, status: OpenAIStatus | null): string | null {
-  if (!isOpenAIModel(modelId) || !status) return null;
-  if (status.codex_connected) return "OAuth";
-  if (status.has_api_key) return "API";
-  return null;
-}
 
 function ModelBadge() {
   const [modelId, setModelId] = useState<string | null>(null);
   const [models, setModels] = useState<Model[]>([]);
-  const [openaiStatus, setOpenaiStatus] = useState<OpenAIStatus | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [s, m, o] = await Promise.all([
+      const [s, m] = await Promise.all([
         getSettings(),
         getModels(),
-        getOpenAIStatus(),
       ]);
       setModelId(s.model);
       setModels(m);
-      setOpenaiStatus(o);
     } catch {
       // Silently fail — badge just won't show
     }
@@ -90,9 +66,6 @@ function ModelBadge() {
     try {
       await updateSettings({ model: id });
       setModelId(id);
-      // Refresh OpenAI status in case provider changed
-      const o = await getOpenAIStatus();
-      setOpenaiStatus(o);
     } catch (e) {
       console.error("Failed to switch model:", e);
     } finally {
@@ -103,11 +76,8 @@ function ModelBadge() {
   if (!modelId || models.length === 0) return null;
 
   const currentModel = models.find((m) => m.id === modelId);
-  const displayName = currentModel ? getShortName(currentModel) : modelId;
-  const authLabel = getAuthLabel(modelId, openaiStatus);
-
-  const anthropicModels = models.filter((m) => m.provider === "anthropic" || !m.provider);
-  const openaiModels = models.filter((m) => m.provider === "openai");
+  const displayName = currentModel?.name ?? modelId;
+  const title = `Model: ${displayName}${currentModel?.description ? ` — ${currentModel.description}` : ""}`;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -119,66 +89,31 @@ function ModelBadge() {
           "hover:bg-surface border border-transparent hover:border-input-border",
           saving ? "opacity-50" : "text-text-muted"
         )}
-        title={`Model: ${currentModel?.name ?? modelId}${authLabel ? ` (${authLabel})` : ""}`}
+        title={title}
       >
         <span className="font-medium text-text-primary">{displayName}</span>
-        {authLabel && (
-          <span className={cn(
-            "px-1 py-0.5 rounded text-[10px] font-medium leading-none",
-            authLabel === "OAuth"
-              ? "bg-green-400/15 text-green-400"
-              : "bg-amber-400/15 text-amber-400"
-          )}>
-            {authLabel}
-          </span>
-        )}
         <ChevronDown className="w-3 h-3" />
       </button>
 
       {dropdownOpen && (
         <div className="absolute top-full right-0 mt-1 w-56 rounded-lg border border-input-border bg-primary-bg shadow-lg z-50 py-1">
-          {anthropicModels.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                Anthropic
-              </div>
-              {anthropicModels.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => handleSelect(m.id)}
-                  className={cn(
-                    "w-full text-left px-3 py-1.5 text-sm transition-colors",
-                    m.id === modelId
-                      ? "text-terminal bg-terminal/10"
-                      : "text-text-primary hover:bg-surface"
-                  )}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </>
-          )}
-          {openaiModels.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-[10px] font-medium text-text-muted uppercase tracking-wider mt-1 border-t border-input-border pt-2">
-                OpenAI
-              </div>
-              {openaiModels.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => handleSelect(m.id)}
-                  className={cn(
-                    "w-full text-left px-3 py-1.5 text-sm transition-colors",
-                    m.id === modelId
-                      ? "text-terminal bg-terminal/10"
-                      : "text-text-primary hover:bg-surface"
-                  )}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </>
-          )}
+          {models.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => handleSelect(m.id)}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-sm transition-colors",
+                m.id === modelId
+                  ? "text-terminal bg-terminal/10"
+                  : "text-text-primary hover:bg-surface"
+              )}
+            >
+              <div>{m.name}</div>
+              {m.description && (
+                <div className="text-[10px] text-text-muted">{m.description}</div>
+              )}
+            </button>
+          ))}
         </div>
       )}
     </div>

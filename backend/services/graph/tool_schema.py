@@ -1,41 +1,13 @@
 """
-Tool schema conversion for Anthropic and OpenAI APIs.
+Tool schema conversion for the OpenAI Responses API.
 
 Converts EdwardTool and MCPToolWrapper objects into the tool schema format
-expected by each provider's API:
-- Anthropic: anthropic.messages.create(tools=[...])
-- OpenAI: openai.responses.create(tools=[...])
+expected by openai.responses.create(tools=[...]) — the only LLM tool-calling
+surface Edward calls (chat is GPT via Codex OAuth; Tier 2 Haiku calls make no
+tool calls). There is no Anthropic tool schema path.
 """
 
 from typing import Any
-
-
-def tool_to_anthropic_schema(tool: Any) -> dict:
-    """Convert a tool object to Anthropic's tool schema format.
-
-    Works with both EdwardTool (.args_schema is a Pydantic model) and
-    MCPToolWrapper (.args_schema may be a Pydantic model or have _input_schema).
-    """
-    schema = _extract_json_schema(tool)
-
-    # Clean the schema: keep only what Anthropic expects
-    clean_schema = {
-        "type": schema.get("type", "object"),
-        "properties": schema.get("properties", {}),
-    }
-    if "required" in schema:
-        clean_schema["required"] = schema["required"]
-
-    return {
-        "name": tool.name,
-        "description": tool.description or "",
-        "input_schema": clean_schema,
-    }
-
-
-def tools_to_anthropic_schemas(tools: list) -> list[dict]:
-    """Convert a list of tools to Anthropic tool schema format."""
-    return [tool_to_anthropic_schema(t) for t in tools]
 
 
 def tool_to_openai_schema(tool: Any) -> dict:
@@ -79,7 +51,7 @@ def _extract_json_schema(tool: Any) -> dict:
     # Pydantic v2 model class
     if hasattr(args_schema, "model_json_schema"):
         schema = args_schema.model_json_schema()
-        # Strip Pydantic-added fields that Anthropic doesn't want
+        # Strip Pydantic-added fields the OpenAI tool schema doesn't want
         schema.pop("title", None)
         schema.pop("$defs", None)
         schema.pop("definitions", None)

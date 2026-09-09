@@ -1,6 +1,6 @@
 # Plan 001: Revival — Rebuild Edward In Place
 
-**Status: Approved 2026-09-09. M1, M2 complete. M4 next (pulled ahead of M3 on 2026-09-09: the Codex endpoint no longer serves `gpt-5.4`, so chat is silently falling back to the metered API key; fixing the model first keeps M3 testing on subscription credits). Then M3.**
+**Status: Approved 2026-09-09. M1, M2, M4 complete (M4 was pulled ahead of M3 on 2026-09-09 because the Codex endpoint stopped serving `gpt-5.4` and chat was silently falling back to the metered API key). M3 next.**
 
 Supersedes the `IMPLEMENTATION_PLANS/` sequence (000–014) and `docs/superpowers/`. Those trees are frozen as archive; nothing in them is authoritative once this plan is approved.
 
@@ -135,7 +135,7 @@ Status: **complete 2026-09-09**
 - The 5 pending self-audit events were cancelled directly in the database (backend was down, so the API was unavailable).
 
 ### M4 note — chat model
-`settings.model` is currently `gpt-5.4`. The owner reports newer GPT models (5.6 and the "6 Astra" line) are available on the Codex endpoint. M4 must **probe the endpoint for the models it actually serves** and set the default and picker from that result, never from a hardcoded list or from memory.
+`settings.model` was `gpt-5.4`. The owner reported newer GPT models (5.6 and the "6 Astra" line) on the Codex endpoint. M4 had to **probe the endpoint for the models it actually serves** and set the default and picker from that result, never from a hardcoded list or from memory. Probe result is recorded in the M4 block below.
 
 ### M2 — Delete macOS, Twilio, widget, hosting, persistent DBs, file storage, LangSmith, legacy graph
 Status: **complete 2026-09-09** — backend boots clean, `npm run lint` and `npm run build` pass. Browser-verified after the owner signed in: Settings tiles (Databases/Files gone), Heartbeat panel with a single WhatsApp listener, Skills (9 skills), Events browser, and a full chat turn that streamed a reply, saved to `conversation_messages`, and ran memory extraction; chat and settings checked at 375px. Two pre-existing issues surfaced, neither caused by M2: (1) the Codex endpoint now rejects `gpt-5.4` ("not supported when using Codex with a ChatGPT account"), so every turn silently falls through to the pay-per-token `OPENAI_API_KEY` path — this is the M4 probe item and should be done next; (2) a React hydration mismatch in the header (`ClientLayout.tsx`, the `isAuthenticated && <ModelBadge />` branch) from commit 0e80767, visible only as a dev-overlay error.
@@ -153,10 +153,13 @@ Status: pending
 - `requirements.txt` drops `claude-agent-sdk`, `notebooklm-mcp-cli`, `langsmith`, `twilio`, `phonenumbers`, `aiohttp` (if only Codex OAuth callback used it, keep), and anything else unreferenced.
 
 ### M4 — Provider simplification
-Status: pending
-- Chat loop keeps only the OpenAI Responses / Codex OAuth path. Anthropic chat branch removed.
-- Header model picker lists the GPT models the Codex endpoint serves; default is the current one in settings.
-- `llm_client.py` stays Anthropic-Haiku. Startup fails loudly with a clear message if either credential is missing.
+Status: **complete 2026-09-09** — backend boots with zero tracebacks in the uvicorn err log; startup logged the served list and rewrote `settings.model` from `gpt-5.4` to `gpt-6-astra`; starting without `ANTHROPIC_API_KEY` raises the named `RuntimeError`; `npm run lint` and `npm run build` pass. Browser-verified signed in: the header picker lists the five served models with descriptions; a chat turn asking for a web search logged `[LLM] Calling Codex OAuth (gpt-6-astra)` twice (tool call, then reply), streamed the answer, saved to `conversation_messages`, and memory extraction stored a new `context` memory; no hydration error in the console; chat and Settings → General checked at 375px with no horizontal overflow.
+- **Probe (2026-09-09).** `GET https://chatgpt.com/backend-api/codex/models?client_version=<v>` with the same auth headers as the responses call returns the served catalogue. `client_version` is required, and the server hides models whose `minimal_client_version` is newer than the value given, so Edward asks with `99.0.0`. Served that day, by priority: `gpt-6-astra` (1, "GPT-6-Astra"), `gpt-5.6-sol` (6), `gpt-5.6-terra` (7), `gpt-5.6-luna` (8), `gpt-5.5` (12); hidden entries `gpt-reserve` (an alias that answers as `gpt-5.6-luna`) and `codex-auto-review`. Every listed slug answered a real POST. Rejected with HTTP 400 "not supported when using Codex with a ChatGPT account": `gpt-5.4`, `gpt-5.6`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.5-codex`, `gpt-5.6-codex`, `gpt-5-codex`, `gpt-6`, `codex-mini-latest`.
+- **Model resolution.** `codex_oauth_service.list_served_models()` fetches the listing (10-minute cache, `visibility == "list"` only, sorted by priority) and `resolve_chat_model()` keeps `settings.model` if it is served, else picks the highest-priority served model and logs it. Startup runs the probe once, logs the list, and rewrites a stale `settings.model` (`gpt-5.4` → `gpt-6-astra`). `_call_llm` resolves again on every turn from the cache, so a model retired mid-run surfaces as a log line and a served model, never as spend.
+- **Deleted in full:** the Anthropic chat branch in `streaming.py` (`_call_anthropic`, `_build_api_kwargs`, effort handling, the Anthropic streaming fallback), the metered `_call_openai` path and its "OpenAI Auth Fallback" push, `_is_openai_model`, `tools_to_anthropic_schemas`, the hardcoded `ANTHROPIC_MODELS` / `OPENAI_MODELS` lists, the `openai` package, and `OPENAI_API_KEY` from `.env.example`. `GET /api/settings/models` now returns the served list; the header badge and the Settings select are one flat list with no provider grouping.
+- **Startup credential checks.** `ANTHROPIC_API_KEY` missing → `RuntimeError` naming the variable before `init_db`. Codex OAuth tokens missing → a loud console banner, and the app still boots so the owner can sign in from Settings → OpenAI (the sign-in flow lives inside the app, so a hard fail here would lock the owner out). A listing failure with tokens present raises and stops startup.
+- **Hydration fix.** `AuthContext` seeded `isAuthenticated` from `localStorage` inside the state initializer, so the server rendered "logged out" and the client "logged in" and the header badge mismatched. It now reads the hint through `useSyncExternalStore` with a `false` server snapshot.
+- D-001-2 stamped above `_call_llm` in `streaming.py`; D-001-3 stamped in `llm_client.py`.
 - Verify: a chat turn streams, a tool call round-trips, memory extraction runs after the turn.
 
 ### M5 — Data cleanup and schema drop

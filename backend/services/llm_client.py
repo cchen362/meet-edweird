@@ -5,10 +5,12 @@ Provides a singleton AsyncAnthropic client and convenience wrappers.
 Replaces ChatAnthropic + langchain_core.messages for all Haiku call sites.
 """
 
-import os
 from typing import Optional
 
 import anthropic
+
+# D-001-3: background jobs stay on Claude Haiku 4.5. This module is the only Anthropic caller in the codebase; chat never uses it.
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 _client: Optional[anthropic.AsyncAnthropic] = None
 
@@ -26,7 +28,7 @@ async def haiku_call(
     message: str,
     max_tokens: int = 256,
     temperature: float = 0,
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = HAIKU_MODEL,
 ) -> str:
     """Simple Haiku call that returns text content.
 
@@ -56,7 +58,7 @@ async def haiku_call_with_usage(
     message: str,
     max_tokens: int = 256,
     temperature: float = 0,
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = HAIKU_MODEL,
 ) -> tuple[str, int, int]:
     """Haiku call that also returns token usage.
 

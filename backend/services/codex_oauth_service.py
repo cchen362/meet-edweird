@@ -1,8 +1,12 @@
 """
-Codex OAuth service for ChatGPT subscription-based GPT-5.4 access.
+Codex OAuth service for ChatGPT subscription-based GPT chat access.
 
 PKCE flow with local callback server on port 1455. Tokens stored in database.
 Uses chatgpt.com/backend-api/codex/responses endpoint (not the standard OpenAI API).
+Chat (D-001-2) is served exclusively through this endpoint — this module also
+resolves which model id the endpoint currently serves, since Codex periodically
+retires model slugs and a stale settings.model must never fall through to a
+metered API-key path.
 
 References:
 - Cline OpenAI Codex OAuth (merged PR #8664)
@@ -15,6 +19,7 @@ import base64
 import hashlib
 import json
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -31,9 +36,18 @@ REDIRECT_URI = "http://localhost:1455/auth/callback"
 SCOPES = "openid profile email offline_access"
 CALLBACK_PORT = 1455
 CODEX_API_URL = "https://chatgpt.com/backend-api/codex/responses"
+CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
+# The endpoint hides any model whose minimal_client_version exceeds the version
+# we report. Edward is not the Codex CLI and has no protocol constraint to honor,
+# so it reports a deliberately high version to see the full served list.
+CODEX_CLIENT_VERSION = "99.0.0"
 
 # In-memory state for pending OAuth flow (only one flow at a time)
 _pending_auth: dict = {}
+
+# (fetched_at_monotonic, models) — served-models cache, 10 minute TTL
+_served_models_cache: Optional[tuple[float, list[dict]]] = None
+_SERVED_MODELS_TTL_SECONDS = 600
 
 
 def _generate_pkce() -> tuple[str, str]:
@@ -340,3 +354,108 @@ async def clear_tokens():
             await session.delete(record)
             await session.commit()
     print("[CODEX OAUTH] Tokens cleared")
+
+
+async def list_served_models(force_refresh: bool = False) -> list[dict]:
+    """Fetch the models the Codex endpoint currently serves.
+
+    Returns a list of {"id", "name", "description", "priority"} sorted by
+    priority ascending (1 = newest/most capable). Cached in-process for
+    _SERVED_MODELS_TTL_SECONDS; pass force_refresh=True to bypass the cache.
+    Raises ValueError if Codex OAuth isn't connected, the endpoint errors,
+    or the served list comes back empty.
+    """
+    global _served_models_cache
+
+    if not force_refresh and _served_models_cache is not None:
+        fetched_at, models = _served_models_cache
+        if time.monotonic() - fetched_at < _SERVED_MODELS_TTL_SECONDS:
+            return models
+
+    access_token = await get_access_token()
+    account_id = await get_account_id()
+    if not access_token or not account_id:
+        raise ValueError("Codex OAuth not connected. Sign in under Settings → OpenAI.")
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "ChatGPT-Account-Id": account_id,
+        "originator": "edward",
+        "OpenAI-Beta": "responses=experimental",
+    }
+    params = {"client_version": CODEX_CLIENT_VERSION}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(CODEX_MODELS_URL, headers=headers, params=params)
+
+    if response.status_code != 200:
+        raise ValueError(f"Codex models endpoint returned {response.status_code}: {response.text[:200]}")
+
+    data = response.json()
+    listed = [m for m in data.get("models", []) if m.get("visibility") == "list"]
+    listed.sort(key=lambda m: m.get("priority", 0))
+
+    models = [
+        {
+            "id": m["slug"],
+            "name": m.get("display_name", m["slug"]),
+            "description": m.get("description", ""),
+            "priority": m.get("priority", 0),
+        }
+        for m in listed
+    ]
+
+    if not models:
+        raise ValueError("Codex models endpoint returned no models with visibility 'list'.")
+
+    _served_models_cache = (time.monotonic(), models)
+    print(f"[CODEX] Served models ({len(models)}): {', '.join(m['id'] for m in models)}")
+    return models
+
+
+async def resolve_chat_model(requested: str) -> str:
+    """Resolve a requested chat model id against what the Codex endpoint actually serves.
+
+    Returns `requested` unchanged if it is served; otherwise falls back to the
+    newest served model (lowest priority number) and logs why.
+    """
+    served = await list_served_models()
+    served_ids = {m["id"] for m in served}
+    if requested in served_ids:
+        return requested
+
+    newest = served[0]["id"]
+    print(f"[CODEX] settings.model '{requested}' is not served by the Codex endpoint; using newest served model '{newest}'")
+    return newest
+
+
+async def ensure_chat_model_at_startup() -> None:
+    """Verify Codex OAuth connectivity and pin settings.model to a served model.
+
+    Called once from the FastAPI lifespan, right after init_db(). Deliberately
+    not wrapped in a swallowing try/except for the served-models fetch: chat is
+    Codex OAuth only (D-001-2), so a network failure here must fail startup
+    loudly rather than let the app boot with an unverified/rejected chat model.
+    """
+    if not await has_valid_tokens():
+        # The app must still boot — the OAuth sign-in flow itself runs inside
+        # the running app (Settings → OpenAI), so this cannot be a hard failure.
+        print("!" * 70)
+        print("!!! CODEX OAUTH NOT CONNECTED")
+        print("!!! Chat is unavailable until you sign in.")
+        print("!!! Open Settings → OpenAI → Sign in with OpenAI")
+        print("!" * 70)
+        return
+
+    from services.settings_service import get_settings, update_settings
+    from models import SettingsUpdate
+
+    await list_served_models(force_refresh=True)
+    settings = await get_settings()
+    resolved = await resolve_chat_model(settings.model)
+
+    if resolved != settings.model:
+        await update_settings(SettingsUpdate(model=resolved))
+        print(f"[CODEX] Chat model set to '{resolved}' (was '{settings.model}')")
+    else:
+        print(f"[CODEX] Chat model: '{resolved}'")
