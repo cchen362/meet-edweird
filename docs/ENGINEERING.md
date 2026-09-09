@@ -6,7 +6,7 @@
 
 Edward is a single-user personal AI companion with long-term memory, reached from a phone PWA, a desktop browser, and WhatsApp. Companion first (remembers the owner's life, checks in, banters), light ops assistant second (reminders, web lookups, GitHub questions). Next.js frontend, FastAPI backend, PostgreSQL + pgvector, GPT via Codex OAuth for chat, Claude Haiku for background jobs.
 
-Revival cleanup: `docs/plans/001_REVIVAL_CLEANUP.md` — M1–M5 removed the unused subsystems in September 2026. Read its status header for M6 verification and merge progress.
+Revival cleanup: `docs/plans/001_REVIVAL_CLEANUP.md` — completed in September 2026. Its M6 record documents verification, merge and branch cleanup, including unresolved WhatsApp and GitHub MCP failures.
 
 Frozen reference: `docs/specs/ARCHITECTURE_LEGACY_2026-03.md` — the pre-revival feature catalogue. Historical only; much of it describes deleted code.
 
