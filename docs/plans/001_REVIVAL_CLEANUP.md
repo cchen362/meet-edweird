@@ -1,6 +1,6 @@
 # Plan 001: Revival — Rebuild Edward In Place
 
-**Status: Approved 2026-09-09. M1, M2 complete. M3 next.**
+**Status: Approved 2026-09-09. M1, M2 complete. M4 next (pulled ahead of M3 on 2026-09-09: the Codex endpoint no longer serves `gpt-5.4`, so chat is silently falling back to the metered API key; fixing the model first keeps M3 testing on subscription credits). Then M3.**
 
 Supersedes the `IMPLEMENTATION_PLANS/` sequence (000–014) and `docs/superpowers/`. Those trees are frozen as archive; nothing in them is authoritative once this plan is approved.
 
